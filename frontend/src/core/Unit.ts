@@ -1,5 +1,5 @@
 // Unit.ts
-// Representa una unidad (jugador o enemigo) en el tablero
+// Represents a unit (player or enemy) on the board
 
 import { Spell } from './Spell';
 
@@ -15,31 +15,31 @@ export class Unit {
   name: string;
   type: UnitType;
   position: Position;
-  pm: number;
-  maxPM: number;
-  pa: number;
-  maxPA: number;
+  mp: number;
+  maxMP: number;
+  ap: number;
+  maxAP: number;
   hp: number;
   maxHP: number;
   spells: Spell[];
   selectedSpellIdx: number;
 
-  constructor(id: string, name: string, type: UnitType, position: Position, maxPM: number = 4) {
+  constructor(id: string, name: string, type: UnitType, position: Position, maxMP: number = 4) {
     this.id = id;
     this.name = name;
     this.type = type;
     this.position = position;
-    this.maxPM = maxPM;
-    this.pm = maxPM;
-    this.maxPA = 6;
-    this.pa = 6;
+    this.maxMP = maxMP;
+    this.mp = maxMP;
+    this.maxAP = 6;
+    this.ap = 6;
     this.maxHP = 10;
     this.hp = 10;
     this.spells = [
-      new Spell('Hechizo 1', 4, 3, 3, 1),
-      new Spell('Hechizo 2', 6, 5, 5, 1),
+      new Spell('Spell 1', 4, 3, 3, 1),
+      new Spell('Spell 2', 6, 5, 5, 1),
     ];
-    this.selectedSpellIdx = -1; // Ningún hechizo seleccionado por defecto
+    this.selectedSpellIdx = -1; // No spell selected by default
   }
 
   get selectedSpell(): Spell | undefined {
@@ -65,26 +65,26 @@ export class Unit {
     return this.selectedSpell.cast(this, target);
   }
 
-  startTurn(basePM: number = 4) {
-    this.pm = basePM;
-    this.pa = this.maxPA;
+  startTurn(baseMP: number = 4) {
+    this.mp = baseMP;
+    this.ap = this.maxAP;
     for (const spell of this.spells) spell.resetTurn();
-    this.selectedSpellIdx = -1; // Requiere selección manual cada turno
+    this.selectedSpellIdx = -1; // Require manual selection each turn
   }
 
-  /** Verifica si la unidad puede moverse a la celda destino (por distancia Manhattan) */
+  /** Verifies if the unit can move to the destination cell (Manhattan distance) */
   canMoveTo(to: Position): boolean {
     const dist = Math.abs(this.position.x - to.x) + Math.abs(this.position.y - to.y);
-    return dist <= this.pm;
+    return dist <= this.mp;
   }
 
-  /** Mueve la unidad a lo largo de un camino, consumiendo PM */
+  /** Moves the unit along a path, consuming MP */
   async moveTo(path: Position[], onStep?: (pos: Position) => Promise<void>) {
     if (!path || path.length === 0) return;
-    let steps = Math.min(path.length, this.pm);
+    let steps = Math.min(path.length, this.mp);
     for (let i = 0; i < steps; i++) {
       this.position = path[i];
-      this.pm--;
+      this.mp--;
       if (onStep) {
         await onStep(this.position);
       }
