@@ -8,6 +8,7 @@ import { GridView } from '@rendering/GridView';
 import { Container, Graphics, Text, TextStyle, Sprite, Texture, SCALE_MODES } from 'pixi.js';
 import { UIManager } from '@ui/UIManager';
 import { MapGrid } from '@core/MapGrid';
+import { Spell } from '@core/Spell';
 
 export class BattleScene extends Container {
   private grid: Grid;
@@ -64,9 +65,17 @@ export class BattleScene extends Container {
     // Game logic
     this.grid = new Grid(10, 10);
     this.map = new MapGrid(10, 10);
+    // Selección aleatoria de clases para los dos jugadores
+    const classNames = Object.keys(UnitClasses);
+    const idx1 = Math.floor(Math.random() * classNames.length);
+    let idx2 = Math.floor(Math.random() * classNames.length);
+    // Evitar que ambos sean la misma clase
+    if (idx2 === idx1) idx2 = (idx2 + 1) % classNames.length;
+    const class1 = UnitClasses[classNames[idx1]];
+    const class2 = UnitClasses[classNames[idx2]];
     this.units = [
-      new Unit('p1', 'Player 1', 'player', { x: 0, y: 0 }, 0, UnitClasses.Warrem),
-      new Unit('p2', 'Player 2', 'player', { x: 9, y: 9 }, 0, UnitClasses.Golarc),
+      new Unit('p1', `Player 1 (${class1.name})`, 'player', { x: 0, y: 0 }, 1, class1),
+      new Unit('p2', `Player 2 (${class2.name})`, 'player', { x: 9, y: 9 }, 2, class2),
     ];
     // Occupies initial positions
     for (const unit of this.units) {
@@ -201,11 +210,57 @@ export class BattleScene extends Container {
     this.ui.setTurnText(`Turn of: ${unit.name}  |  AP: ${unit.ap}`);
   }
 
-  /** Calculates and displays reachable cells and cleans up paths */
+  /**
+   * Orchestrates the battle scene: grid, player, interaction, and rendering.
+   * All targeting and spell logic is delegated to Spell and Unit.
+   */
   private updateReachableAndHighlights() {
-    const unit = this.turnManager.getCurrentUnit();
-    this.reachable = this.grid.getReachableCells(unit.position, unit.mp, this.map);
-    this.gridView.showReachableCells(this.reachable);
+    const caster = this.turnManager.getCurrentUnit();
+    const spell = caster.selectedSpell;
+    this.spellRangeLayer.clear();
+    this.moveRangeLayer.clear();
+    this.reachable = [];
+    if (spell && caster.ap >= spell.cost) {
+      for (let x = 0; x < 10; x++) {
+        for (let y = 0; y < 10; y++) {
+          const pos = { x, y };
+          const dx = Math.abs(caster.position.x - x);
+          const dy = Math.abs(caster.position.y - y);
+          const dist = Math.max(dx, dy);
+          if (dist > spell.range || dist < spell.minRange) continue;
+          this.spellRangeLayer.beginFill(0x66ccff, 0.10);
+          this.spellRangeLayer.drawRect(x * 64, y * 64, 64, 64);
+          this.spellRangeLayer.endFill();
+          let isValid = false;
+          let color = 0xff4444;
+          let target = this.units.find(u => u.position.x === x && u.position.y === y) || null;
+          if (spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') {
+            // Puede ser celda vacía
+            if (!target && spell.canCast(caster, null, { map: this.map, cellPosition: pos })) {
+              isValid = true;
+              color = 0xf1c40f;
+            }
+          }
+          if (target && spell.canCast(caster, target, { map: this.map, cellPosition: pos })) {
+            isValid = true;
+            color = spell.effectType === 'heal' ? 0x3ecf4a : 0xff4444;
+          }
+          if (isValid) {
+            this.reachable.push({ x, y });
+            this.spellRangeLayer.beginFill(color, 0.32);
+            this.spellRangeLayer.drawRect(x * 64, y * 64, 64, 64);
+            this.spellRangeLayer.endFill();
+          }
+        }
+      }
+    } else {
+      this.reachable = this.grid.getReachableCells(caster.position, caster.mp, this.map);
+      for (const cell of this.reachable) {
+        this.moveRangeLayer.beginFill(0x3a8fff, 0.18);
+        this.moveRangeLayer.drawRect(cell.x * 64, cell.y * 64, 64, 64);
+        this.moveRangeLayer.endFill();
+      }
+    }
     this.gridView.showPath([]);
   }
 
@@ -252,26 +307,34 @@ export class BattleScene extends Container {
     this.spellBar.addChild(barBg);
     for (let i = 0; i < spells.length; i++) {
       const spell = spells[i];
+      const hasAP = unit.ap >= spell.cost;
+      const isSelected = i === unit.selectedSpellIdx;
       const btn = new Graphics();
       // Background
-      btn.beginFill(i === unit.selectedSpellIdx ? 0x1976d2 : 0x333333);
+      btn.beginFill(isSelected ? 0x1976d2 : hasAP ? 0x333333 : 0x222222);
       btn.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 12);
       btn.endFill();
       // Border
-      btn.lineStyle(3, i === unit.selectedSpellIdx ? 0xfff066 : 0x222222);
+      btn.lineStyle(3, isSelected ? 0xfff066 : 0x222222);
       btn.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 12);
       // Text
-      const label = new Text(spell.name, new TextStyle({ fontSize: 18, fill: i === unit.selectedSpellIdx ? '#fff' : '#bbb', fontWeight: 'bold' }));
+      const label = new Text(spell.name, new TextStyle({ fontSize: 18, fill: isSelected ? '#fff' : hasAP ? '#bbb' : '#666', fontWeight: 'bold' }));
       label.anchor.set(0.5);
       label.x = buttonWidth / 2;
       label.y = buttonHeight / 2;
       btn.addChild(label);
       btn.x = (canvasWidth - totalWidth) / 2 + i * (buttonWidth + spacing);
       btn.y = y;
-      btn.eventMode = 'static';
-      btn.cursor = 'pointer';
+      btn.eventMode = hasAP ? 'static' : 'none';
+      btn.cursor = hasAP ? 'pointer' : 'not-allowed';
       btn.on('pointerdown', () => {
-        unit.selectedSpellIdx = i;
+        if (!hasAP) return;
+        // Toggle spell selection: deselect if already selected
+        if (unit.selectedSpellIdx === i) {
+          unit.selectedSpellIdx = -1;
+        } else {
+          unit.selectedSpellIdx = i;
+        }
         this.createSpellBar(canvasWidth, barHeight);
         this.updateTurnLabel();
         // Force spell area recalculation
@@ -282,62 +345,74 @@ export class BattleScene extends Container {
     }
   }
 
-  /** Interaction logic: only the active unit can move or attack */
+  /** Maneja el casteo de hechizos y feedback visual, tanto para clicks en grid como en sprites */
+  private async handleSpellCast(target: Unit | null, cellPosition?: { x: number, y: number }) {
+    const caster = this.turnManager.getCurrentUnit();
+    const spell = caster.selectedSpell;
+    if (!spell || caster.ap < spell.cost) return;
+    let spellUsed = false;
+    let canCast = false;
+    if ((spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') && !target) {
+      canCast = spell.canCast(caster, null, { map: this.map, cellPosition, scene: this });
+    } else if (target instanceof Unit) {
+      canCast = spell.canCast(caster, target, { map: this.map, cellPosition: target.position, scene: this });
+    }
+    if (!canCast) return;
+    const casts = caster.castsThisTurn[spell.name] ?? 0;
+    if (spell.maxCastsPerTurn !== -1 && casts >= spell.maxCastsPerTurn) return;
+    let result = false;
+    if ((spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') && !target) {
+      result = spell.cast(caster, null, { map: this.map, scene: this, cellPosition });
+    } else if (target instanceof Unit) {
+      result = spell.cast(caster, target, { map: this.map, scene: this, cellPosition: target.position });
+    }
+    if (result) {
+      caster.castsThisTurn[spell.name] = casts + 1;
+      spellUsed = true;
+      this.updateTurnLabel();
+      this.updateUnitSprites();
+      this.setupSpellListeners();
+    }
+    if (spellUsed) {
+      caster.selectedSpellIdx = -1;
+      this.createSpellBar();
+      this.updateReachableAndHighlights();
+    }
+  }
+
+  /** Interaction logic: only the active unit can move or cast spells */
   private setupInteraction() {
     // Movement on the grid
     this.gridView.on('pointermove', (e: any) => {
       if (this.isMoving) return;
       this.clearEnemyHighlights();
-      // Draws the spell range area (light red) only if a spell is selected
-      this.spellRangeLayer.clear();
+      this.updateReachableAndHighlights();
       const unit = this.turnManager.getCurrentUnit();
-      if (unit.selectedSpell) {
-        const range = unit.selectedSpell.range;
-        for (let dx = -range; dx <= range; dx++) {
-          for (let dy = -range; dy <= range; dy++) {
-            const tx = unit.position.x + dx;
-            const ty = unit.position.y + dy;
-            if (tx === unit.position.x && ty === unit.position.y) continue;
-            if (tx < 0 || tx >= 10 || ty < 0 || ty >= 10) continue;
-            const cheb = Math.max(Math.abs(dx), Math.abs(dy));
-            if (cheb <= range) {
-              // No highlights on cells occupied by allies
-              const occupant = this.map.getOccupant({ x: tx, y: ty });
-              if (!occupant || occupant.type !== unit.type) {
-                this.spellRangeLayer.beginFill(0xff4444, 0.18);
-                this.spellRangeLayer.drawRect(tx * 64, ty * 64, 64, 64);
-                this.spellRangeLayer.endFill();
-              }
-            }
-          }
-        }
-      }
-      // Draws the movement range (blue)
-      this.moveRangeLayer.clear();
-      if (unit.mp > 0) {
-        const moveCells = this.grid.getReachableCells(unit.position, unit.mp, this.map);
-        for (const cell of moveCells) {
-          this.moveRangeLayer.beginFill(0x3a8fff, 0.18);
-          this.moveRangeLayer.drawRect(cell.x * 64, cell.y * 64, 64, 64);
-          this.moveRangeLayer.endFill();
-        }
-      }
-      // Movement path and enemy highlights
-      this.gridView.showPath([]);
+      const selectedSpell = unit.selectedSpell;
       const localX = e.global.x - this.gameContainer.x;
       const localY = e.global.y - this.gameContainer.y;
       const mouseCell: Position | null = this.gridView.getCellAtPixel(localX, localY);
       if (mouseCell) {
-        for (const other of this.units) {
-          if (other !== unit && other.isAlive() && unit.canCastSpell(other)) {
-            if (other.position.x === mouseCell.x && other.position.y === mouseCell.y) {
-              const sprite = this.unitSprites.get(other.id);
-              if (sprite) sprite.tint = 0xff4444;
+        // Highlight valid target using canCast
+        if (selectedSpell && unit.ap >= selectedSpell.cost) {
+          if (selectedSpell.effectType === 'teleport') {
+            const dummyTarget = { position: mouseCell } as Unit;
+            if (selectedSpell.canCast(unit, dummyTarget)) {
+              this.spellRangeLayer.beginFill(0xf1c40f, 0.28);
+              this.spellRangeLayer.drawRect(mouseCell.x * 64, mouseCell.y * 64, 64, 64);
+              this.spellRangeLayer.endFill();
+            }
+          } else {
+            const target = this.units.find(u => u.position.x === mouseCell.x && u.position.y === mouseCell.y);
+            if (target && selectedSpell.canCast(unit, target)) {
+              let color = selectedSpell.effectType === 'heal' ? 0x3ecf4a : 0xff4444;
+              const sprite = this.unitSprites.get(target.id);
+              if (sprite) sprite.tint = color;
             }
           }
         }
-        // Path and highlights only if the cell is valid for movement
-        if (this.isCellReachable(mouseCell, unit)) {
+        // Path and movement highlights
+        if (!selectedSpell && this.isCellReachable(mouseCell, unit)) {
           const path = this.grid.findPath(unit.position, mouseCell, unit.mp, this.map);
           if (path && path.length > 0 && path.length <= unit.mp) {
             this.currentPath = path;
@@ -359,36 +434,46 @@ export class BattleScene extends Container {
       this.clearEnemyHighlights();
       this.gridView.showPath([]);
     });
-    // Click on the grid (movement)
+    // Click on the grid for teleport, heal, o daño
     this.gridView.on('pointerdown', async (e: any) => {
       if (this.isMoving) return;
-      const unit = this.turnManager.getCurrentUnit();
+      const caster = this.turnManager.getCurrentUnit();
+      const spell = caster.selectedSpell;
       const localX = e.global.x - this.gameContainer.x;
       const localY = e.global.y - this.gameContainer.y;
       const pos = this.gridView.getCellAtPixel(localX, localY);
-      if (pos && this.isCellReachable(pos, unit)) {
-        const path = this.grid.findPath(unit.position, pos, unit.mp, this.map);
-        if (path && path.length > 0 && path.length <= unit.mp) {
-          this.isMoving = true;
-          // Releases the current cell before moving
-          this.map.setOccupied(unit.position, null);
-          let prevPos = unit.position;
-          await unit.moveTo(path, async (stepPos) => {
-            // Releases the previous cell and occupies the new one
-            this.map.setOccupied(prevPos, null);
-            this.map.setOccupied(stepPos, unit);
-            prevPos = stepPos;
+      if (!pos) return;
+      if (spell && caster.ap >= spell.cost) {
+        let target = this.units.find(u => u.position.x === pos.x && u.position.y === pos.y) || null;
+        if ((spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') && !target) {
+          await this.handleSpellCast(null, pos);
+        } else if (target && spell.canCast(caster, target, { map: this.map, cellPosition: pos })) {
+          await this.handleSpellCast(target, pos);
+        }
+      } else if (!spell || (spell && caster.ap < spell.cost)) {
+        // Normal movement
+        if (!spell && this.isCellReachable(pos, caster)) {
+          const path = this.grid.findPath(caster.position, pos, caster.mp, this.map);
+          if (path && path.length > 0 && path.length <= caster.mp) {
+            this.isMoving = true;
+            this.map.setOccupied(caster.position, null);
+            let prevPos = caster.position;
+            await caster.moveTo(path, async (stepPos) => {
+              this.map.setOccupied(prevPos, null);
+              this.map.setOccupied(stepPos, caster);
+              prevPos = stepPos;
+              this.updateUnitSprites();
+              await new Promise(res => setTimeout(res, 200));
+            });
             this.updateUnitSprites();
-            await new Promise(res => setTimeout(res, 200));
-          });
-          this.updateUnitSprites();
-          this.updateReachableAndHighlights();
-          this.isMoving = false;
-          this.updateEndTurnButton();
+            this.updateReachableAndHighlights();
+            this.isMoving = false;
+            this.updateEndTurnButton();
+          }
         }
       }
     });
-    // Click on enemy sprites (spell)
+    // Listeners en sprites: solo delegan a handleSpellCast
     this.setupSpellListeners();
     this.positionSpellBar();
   }
@@ -435,53 +520,39 @@ export class BattleScene extends Container {
     this.moveRangeLayer.clear();
     this.setupSpellListeners();
     this.positionSpellBar();
+    this.updateReachableAndHighlights();
   }
 
-  /** Configures spell listeners on enemy sprites (only for the active player) */
+  /**
+   * Sets up listeners for all unit sprites based on spell.canCast.
+   * Uses a helper to apply listeners and visual feedback.
+   */
   private setupSpellListeners() {
-    // Clears previous listeners
-    for (const other of this.units) {
-      const sprite = this.unitSprites.get(other.id);
-      const bar = this.unitBars.get(other.id);
-      if (sprite) {
-        sprite.removeAllListeners && sprite.removeAllListeners('pointerdown');
-        sprite.eventMode = 'none';
-        sprite.cursor = '';
-      }
-      if (bar) {
-        bar.removeAllListeners && bar.removeAllListeners();
-      }
-    }
-    // Only the active player can attack
-    const caster = this.turnManager.getCurrentUnit();
-    for (const other of this.units) {
-      if (other === caster) continue;
-      const sprite = this.unitSprites.get(other.id);
+    for (const unit of this.units) {
+      const sprite = this.unitSprites.get(unit.id);
       if (!sprite) continue;
-      sprite.eventMode = 'static';
-      sprite.cursor = 'pointer';
-      sprite.on('pointerdown', () => {
-        // Only allows attacking if a spell is selected
-        if (caster.selectedSpellIdx === -1) return;
-        // Only allows attacking if the mouse is over the logical target cell
-        const mouseCell = { x: other.position.x, y: other.position.y };
-        if (!caster.canCastSpell(other)) return;
-        if (caster.castSpell(other)) {
-          this.showDamageText(other, `-${caster.selectedSpell ? caster.selectedSpell.damage : ''}`);
-          this.updateTurnLabel();
-          this.updateUnitSprites(); // Updates bars after damage
-          if (!other.isAlive()) {
-            this.unitLayer.removeChild(sprite);
-            const bar = this.unitBars.get(other.id);
-            if (bar) this.unitLayer.removeChild(bar);
-            this.map.setOccupied(other.position, null);
-            this.units = this.units.filter(u => u !== other);
-            this.setupSpellListeners();
-          } else {
-            this.setupSpellListeners();
-          }
-        }
-      });
+      sprite.removeAllListeners && sprite.removeAllListeners('pointerdown');
+      sprite.eventMode = 'none';
+      sprite.cursor = '';
+      const caster = this.turnManager.getCurrentUnit();
+      const spell = caster.selectedSpell;
+      if (!spell || caster.ap < spell.cost) continue;
+      if (this.isCellReachable(unit.position, caster) && spell.canCast(caster, unit, { map: this.map, cellPosition: unit.position })) {
+        this.applySpellListener(sprite, caster, unit, spell);
+      }
     }
+  }
+
+  /**
+   * Helper to apply a spell listener and visual feedback to a sprite.
+   */
+  private applySpellListener(sprite: Container, caster: Unit, target: Unit, spell: Spell) {
+    sprite.eventMode = 'static';
+    sprite.cursor = 'pointer';
+    sprite.on('pointerdown', () => {
+      this.handleSpellCast(target);
+    });
+    // Optionally, add visual feedback (e.g., highlight sprite)
+    // ...
   }
 } 

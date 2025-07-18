@@ -11,6 +11,10 @@ export interface Position {
   y: number;
 }
 
+/**
+ * Represents a unit (player or enemy) on the board.
+ * Each unit belongs to a team (faction) for targeting logic.
+ */
 export class Unit {
   id: string;
   name: string;
@@ -25,13 +29,18 @@ export class Unit {
   spells: Spell[];
   selectedSpellIdx: number;
   castsThisTurn: Record<string, number> = {};
+  shouldRestoreAP: boolean = true;
+  team: number;
 
-  constructor(id: string, name: string, type: UnitType, position: Position, maxMP: number = 4, unitClass?: UnitClass) {
+  constructor(id: string, name: string, type: UnitType, position: Position, arg5?: number | UnitClass, arg6?: UnitClass) {
     this.id = id;
     this.name = name;
     this.type = type;
     this.position = position;
-    if (unitClass) {
+    if (typeof arg5 === 'number' && arg6) {
+      // (id, name, type, position, team, unitClass)
+      this.team = arg5;
+      const unitClass = arg6;
       this.maxHP = unitClass.maxHP;
       this.hp = unitClass.maxHP;
       this.maxAP = unitClass.maxAP;
@@ -39,9 +48,24 @@ export class Unit {
       this.maxMP = unitClass.maxMP;
       this.mp = unitClass.maxMP;
       this.spells = unitClass.spells.map(s => Object.assign(Object.create(Object.getPrototypeOf(s)), s));
+    } else if (typeof arg5 === 'number') {
+      // (id, name, type, position, maxMP)
+      this.team = 1;
+      this.maxMP = arg5;
+      this.mp = arg5;
+      this.maxAP = 6;
+      this.ap = 6;
+      this.maxHP = 10;
+      this.hp = 10;
+      this.spells = [
+        new Spell('Spell 1', 4, 3, 3, 1),
+        new Spell('Spell 2', 6, 5, 5, 1),
+      ];
     } else {
-      this.maxMP = maxMP;
-      this.mp = maxMP;
+      // (id, name, type, position)
+      this.team = 1;
+      this.maxMP = 4;
+      this.mp = 4;
       this.maxAP = 6;
       this.ap = 6;
       this.maxHP = 10;
@@ -96,9 +120,16 @@ export class Unit {
     return result;
   }
 
+  preventAPRestore() {
+    this.shouldRestoreAP = false;
+  }
+
   startTurn(baseMP: number = 4) {
     this.mp = baseMP;
-    this.ap = this.maxAP;
+    if (this.shouldRestoreAP) {
+      this.ap = this.maxAP;
+    }
+    this.shouldRestoreAP = true;
     this.resetSpellUsage();
     this.selectedSpellIdx = -1; // Require manual selection each turn
   }
@@ -125,5 +156,28 @@ export class Unit {
         await onStep(this.position);
       }
     }
+  }
+
+  heal(amount: number) {
+    this.hp = Math.min(this.maxHP, this.hp + amount);
+  }
+
+  loseAP(amount: number): number {
+    const before = this.ap;
+    this.ap = Math.max(0, this.ap - amount);
+    return before - this.ap;
+  }
+
+  /** Returns true if the other unit is the same as this one (by id). */
+  isSelf(other: Unit): boolean {
+    return this.id === other.id;
+  }
+  /** Returns true if the other unit is an ally (same team, not self). */
+  isAllyOf(other: Unit): boolean {
+    return this.team === other.team && this.id !== other.id;
+  }
+  /** Returns true if the other unit is an enemy (different team). */
+  isEnemyOf(other: Unit): boolean {
+    return this.team !== other.team;
   }
 } 
