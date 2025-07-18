@@ -2,6 +2,7 @@
 // Represents a unit (player or enemy) on the board
 
 import { Spell } from './Spell';
+import type { UnitClass } from './unitClasses';
 
 export type UnitType = 'player' | 'enemy';
 
@@ -23,23 +24,42 @@ export class Unit {
   maxHP: number;
   spells: Spell[];
   selectedSpellIdx: number;
+  castsThisTurn: Record<string, number> = {};
 
-  constructor(id: string, name: string, type: UnitType, position: Position, maxMP: number = 4) {
+  constructor(id: string, name: string, type: UnitType, position: Position, maxMP: number = 4, unitClass?: UnitClass) {
     this.id = id;
     this.name = name;
     this.type = type;
     this.position = position;
-    this.maxMP = maxMP;
-    this.mp = maxMP;
-    this.maxAP = 6;
-    this.ap = 6;
-    this.maxHP = 10;
-    this.hp = 10;
-    this.spells = [
-      new Spell('Spell 1', 4, 3, 3, 1),
-      new Spell('Spell 2', 6, 5, 5, 1),
-    ];
+    if (unitClass) {
+      this.maxHP = unitClass.maxHP;
+      this.hp = unitClass.maxHP;
+      this.maxAP = unitClass.maxAP;
+      this.ap = unitClass.maxAP;
+      this.maxMP = unitClass.maxMP;
+      this.mp = unitClass.maxMP;
+      this.spells = unitClass.spells.map(s => Object.assign(Object.create(Object.getPrototypeOf(s)), s));
+    } else {
+      this.maxMP = maxMP;
+      this.mp = maxMP;
+      this.maxAP = 6;
+      this.ap = 6;
+      this.maxHP = 10;
+      this.hp = 10;
+      this.spells = [
+        new Spell('Spell 1', 4, 3, 3, 1),
+        new Spell('Spell 2', 6, 5, 5, 1),
+      ];
+    }
+    this.resetSpellUsage();
     this.selectedSpellIdx = -1; // No spell selected by default
+  }
+
+  resetSpellUsage() {
+    this.castsThisTurn = {};
+    for (const spell of this.spells) {
+      this.castsThisTurn[spell.name] = 0;
+    }
   }
 
   get selectedSpell(): Spell | undefined {
@@ -56,20 +76,36 @@ export class Unit {
   }
 
   canCastSpell(target: Unit): boolean {
-    if (!this.selectedSpell) return false;
-    return this.selectedSpell.canCast(this, target);
+    const spell = this.selectedSpell;
+    if (!spell) return false;
+    // Lógica de límite de lanzamientos
+    const casts = this.castsThisTurn[spell.name] ?? 0;
+    if (spell.maxCastsPerTurn !== -1 && casts >= spell.maxCastsPerTurn) return false;
+    return spell.canCast(this, target);
   }
 
   castSpell(target: Unit): boolean {
-    if (!this.selectedSpell) return false;
-    return this.selectedSpell.cast(this, target);
+    const spell = this.selectedSpell;
+    if (!spell) return false;
+    const casts = this.castsThisTurn[spell.name] ?? 0;
+    if (spell.maxCastsPerTurn !== -1 && casts >= spell.maxCastsPerTurn) return false;
+    const result = spell.cast(this, target);
+    if (result) {
+      this.castsThisTurn[spell.name] = casts + 1;
+    }
+    return result;
   }
 
   startTurn(baseMP: number = 4) {
     this.mp = baseMP;
     this.ap = this.maxAP;
-    for (const spell of this.spells) spell.resetTurn();
+    this.resetSpellUsage();
     this.selectedSpellIdx = -1; // Require manual selection each turn
+  }
+
+  restoreResources() {
+    this.ap = this.maxAP;
+    this.mp = this.maxMP;
   }
 
   /** Verifies if the unit can move to the destination cell (Manhattan distance) */

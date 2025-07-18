@@ -2,6 +2,7 @@
 // Orchestrates the battle scene: grid, player, interaction, and rendering
 import { Grid, Position } from '@core/Grid';
 import { Unit } from '@core/Unit';
+import { UnitClasses } from '@core/unitClasses';
 import { TurnManager } from '@core/TurnManager';
 import { GridView } from '@rendering/GridView';
 import { Container, Graphics, Text, TextStyle, Sprite, Texture, SCALE_MODES } from 'pixi.js';
@@ -64,8 +65,8 @@ export class BattleScene extends Container {
     this.grid = new Grid(10, 10);
     this.map = new MapGrid(10, 10);
     this.units = [
-      new Unit('p1', 'Player 1', 'player', { x: 0, y: 0 }, this.basePM),
-      new Unit('p2', 'Player 2', 'player', { x: 9, y: 9 }, this.basePM),
+      new Unit('p1', 'Player 1', 'player', { x: 0, y: 0 }, 0, UnitClasses.Warrem),
+      new Unit('p2', 'Player 2', 'player', { x: 9, y: 9 }, 0, UnitClasses.Golarc),
     ];
     // Occupies initial positions
     for (const unit of this.units) {

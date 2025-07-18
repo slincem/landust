@@ -21,6 +21,11 @@ export class TurnManager {
 
   /** Termina el turno actual y pasa al siguiente */
   endTurn() {
+    // Restaura AP y MP del jugador que termina su turno
+    const prevUnit = this.getCurrentUnit();
+    if (prevUnit && typeof prevUnit.restoreResources === 'function') {
+      prevUnit.restoreResources();
+    }
     this.currentIndex = (this.currentIndex + 1) % this.units.length;
     this.getCurrentUnit().startTurn();
   }
