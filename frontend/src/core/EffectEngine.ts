@@ -83,12 +83,13 @@ export class EffectEngine {
       case 'drain_ap':
         if (target) {
           target.loseAP(value);
-          // Apply a temporary 'ap_loss' state so AP is not restored next turn
+          // Apply a temporary 'ap_loss' state so AP is not restored next turn; expires at end of turn
           const state: State = {
             id: `ap_loss_${Date.now()}_${Math.random()}`,
             type: 'ap_loss',
-            duration: 1, // 1 turn (configurable)
-            value: value
+            duration: 1, // 1 turn
+            value: value,
+            expire: 'end' // Expire at the end of the target's next turn
           };
           target.applyState(state);
           effectText = `-${value} AP`;

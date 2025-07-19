@@ -19,6 +19,7 @@ export interface State {
   value?: number;
   source?: string;
   stackable?: boolean;
+  expire?: 'start' | 'end'; // When to decrement and remove (default: 'start')
 }
 
 /**
@@ -167,15 +168,43 @@ export class Unit {
 
   /**
    * Update all states: decrement duration, remove expired.
-   * Call this at the start of each turn.
+   * By default, called at the start of the turn.
+   * For future extensibility, states can have an 'expire' field ('start' | 'end').
    */
-  public updateStates() {
+  public updateStates(phase: 'start' | 'end' = 'start') {
     for (let i = this.states.length - 1; i >= 0; i--) {
-      this.states[i].duration -= 1;
-      if (this.states[i].duration <= 0) {
+      const state = this.states[i];
+      const expire = state.expire ?? 'start';
+      if (expire === phase) {
+        state.duration -= 1;
+      }
+      if (state.duration <= 0) {
+        // If expiring an 'ap_loss' state at end of turn, restore AP immediately
+        if (state.type === 'ap_loss' && expire === 'end') {
+          this.ap = this.maxAP;
+        }
+        // (Future: handle other resource/blocking states here)
         this.states.splice(i, 1);
       }
     }
+  }
+
+  /**
+   * Hook: called at the start of the unit's turn (for passives, states, etc).
+   * Extend as needed for future effects.
+   */
+  public triggerStartOfTurnEffects() {
+    // Example: apply start-of-turn poison, buffs, etc.
+    // (No-op for now)
+  }
+
+  /**
+   * Hook: called at the end of the unit's turn (for passives, states, etc).
+   * Extend as needed for future effects.
+   */
+  public triggerEndOfTurnEffects() {
+    // Example: apply end-of-turn poison, buffs, etc.
+    // (No-op for now)
   }
 
   /**
@@ -183,6 +212,8 @@ export class Unit {
    * Restores AP/MP unless prevented by a state.
    */
   startTurn(baseMP: number = 4) {
+    // Update states at the start of turn (expire 'start' states)
+    this.updateStates('start');
     this.mp = baseMP;
     // Only restore AP if not under 'ap_loss' state
     if (this.shouldRestoreAP && !this.hasState('ap_loss')) {
@@ -195,8 +226,13 @@ export class Unit {
     this.shouldRestoreAP = true;
     this.resetSpellUsage();
     this.selectedSpellIdx = -1; // Require manual selection each turn
-    // Update states at the start of turn
-    this.updateStates();
+  }
+
+  /**
+   * Call this at the end of the turn to expire 'end' states (future extensibility).
+   */
+  public updateEndOfTurnStates() {
+    this.updateStates('end');
   }
 
   restoreResources() {

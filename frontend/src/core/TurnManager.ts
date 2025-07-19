@@ -2,31 +2,102 @@
 // Controla el flujo de turnos entre varias unidades
 import type { Unit } from './Unit';
 
+export type TurnPhase = 'start' | 'main' | 'end';
+
+type TurnManagerEvent = 'onTurnStart' | 'onTurnEnd' | 'onPhaseChange' | 'onTimerStart';
+type TurnManagerListener = (unit: Unit, phase?: TurnPhase) => void;
+
 export class TurnManager {
-  units: Unit[];
+  private units: Unit[];
   private currentIndex: number = 0;
+  private phase: TurnPhase = 'start';
+  private listeners: Partial<Record<TurnManagerEvent, TurnManagerListener[]>> = {};
+  private turnTimer: number | null = null;
+  private turnTimeLimit: number = 0; // seconds, 0 = no limit
 
   constructor(units: Unit[]) {
     this.units = units;
     this.currentIndex = 0;
     if (this.units.length > 0) {
-      this.units[0].startTurn();
+      this.startTurn();
     }
   }
 
-  /** Devuelve la unidad cuyo turno está activo */
+  /** Returns the unit whose turn is active */
   getCurrentUnit(): Unit {
     return this.units[this.currentIndex];
   }
 
-  /** Termina el turno actual y pasa al siguiente */
-  endTurn() {
-    // Restaura AP y MP del jugador que termina su turno
-    const prevUnit = this.getCurrentUnit();
-    if (prevUnit && typeof prevUnit.restoreResources === 'function') {
-      prevUnit.restoreResources();
-    }
-    this.currentIndex = (this.currentIndex + 1) % this.units.length;
-    this.getCurrentUnit().startTurn();
+  /** Returns the current phase of the turn */
+  getPhase(): TurnPhase {
+    return this.phase;
   }
+
+  /** Register an event listener (onTurnStart, onTurnEnd, etc) */
+  on(event: TurnManagerEvent, listener: TurnManagerListener) {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event]!.push(listener);
+  }
+
+  /** Internal: trigger an event */
+  private trigger(event: TurnManagerEvent, unit: Unit, phase?: TurnPhase) {
+    if (this.listeners[event]) {
+      for (const cb of this.listeners[event]!) {
+        cb(unit, phase);
+      }
+    }
+  }
+
+  /** Starts the turn for the current unit */
+  startTurn() {
+    this.phase = 'start';
+    const unit = this.getCurrentUnit();
+    // Restore AP/MP only if allowed by states
+    unit.startTurn();
+    // Trigger start-of-turn effects (states, passives, etc)
+    if (typeof unit.triggerStartOfTurnEffects === 'function') {
+      unit.triggerStartOfTurnEffects();
+    }
+    this.trigger('onTurnStart', unit, 'start');
+    // (Optional) Start timer for turn (not implemented, just hook)
+    if (this.turnTimeLimit > 0) {
+      this.trigger('onTimerStart', unit, 'start');
+    }
+    // Move to main phase
+    this.mainPhase();
+  }
+
+  /** Main phase: player can act (move, cast spells, etc) */
+  mainPhase() {
+    this.phase = 'main';
+    const unit = this.getCurrentUnit();
+    this.trigger('onPhaseChange', unit, 'main');
+    // No logic here: BattleScene handles player actions
+  }
+
+  /** Ends the turn for the current unit and advances to the next */
+  endTurn() {
+    this.phase = 'end';
+    const unit = this.getCurrentUnit();
+    // Trigger end-of-turn effects (states, passives, etc)
+    if (typeof unit.triggerEndOfTurnEffects === 'function') {
+      unit.triggerEndOfTurnEffects();
+    }
+    // Update end-of-turn states (for future: buffs, poison, etc)
+    if (typeof unit.updateEndOfTurnStates === 'function') {
+      unit.updateEndOfTurnStates();
+    }
+    this.trigger('onTurnEnd', unit, 'end');
+    // Advance to next unit
+    this.currentIndex = (this.currentIndex + 1) % this.units.length;
+    this.startTurn();
+  }
+
+  /** For future: set a time limit per turn (in seconds) */
+  setTurnTimeLimit(seconds: number) {
+    this.turnTimeLimit = seconds;
+  }
+
+  /** For future: support for team turns, simultaneous turns, AI, etc. */
+  // ... (add methods as needed)
 } 
