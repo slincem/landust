@@ -2,6 +2,7 @@
 import type { Unit } from './Unit';
 import type { Position } from './MapGrid';
 import { FloatingText } from '../ui/FloatingText';
+import { EffectEngine, EffectType, EffectContext } from './EffectEngine';
 
 export type SpellEffectType = 'damage' | 'heal' | 'drain_ap' | 'teleport';
 
@@ -19,35 +20,25 @@ export interface SpellConfig {
   cost: number;
   range: number;
   minRange?: number;
-  effectType: SpellEffectType;
+  effectType: EffectType;
   value: number;
   maxCastsPerTurn?: number;
-  canTargetEnemies?: boolean;
-  // New targeting properties for heal
-  canTargetSelf?: boolean;
-  canTargetAllies?: boolean;
-  canTargetEnemiesHeal?: boolean;
-  targetType: SpellTargetType;
+  targetType: string;
+  // Add more config options as needed (area, conditions, etc)
 }
 
 /**
- * Represents a spell (ability) that can be cast by a unit.
- * All targeting and castability logic is encapsulated here.
+ * Spell: Handles targeting and validation. Delegates effect application to EffectEngine.
  */
 export class Spell {
   name: string;
   cost: number;
   range: number;
   minRange: number;
-  effectType: SpellEffectType;
+  effectType: EffectType;
   value: number;
   maxCastsPerTurn: number;
-  canTargetEnemies: boolean;
-  // New targeting properties for heal
-  canTargetSelf: boolean;
-  canTargetAllies: boolean;
-  canTargetEnemiesHeal: boolean;
-  targetType: SpellTargetType;
+  targetType: string;
 
   constructor(config: SpellConfig) {
     this.name = config.name;
@@ -57,20 +48,11 @@ export class Spell {
     this.effectType = config.effectType;
     this.value = config.value;
     this.maxCastsPerTurn = config.maxCastsPerTurn ?? 1;
-    this.canTargetEnemies = config.canTargetEnemies ?? (this.effectType === 'heal' ? false : true);
-    // New targeting properties for heal
-    this.canTargetSelf = config.canTargetSelf ?? (this.effectType === 'heal');
-    this.canTargetAllies = config.canTargetAllies ?? (this.effectType === 'heal');
-    this.canTargetEnemiesHeal = config.canTargetEnemiesHeal ?? false;
     this.targetType = config.targetType;
   }
 
   /**
-   * Determines if this spell can be cast on the target by the caster, based solely on targetType.
-   * - For 'empty' and 'unitOrEmpty', target can be null (cell).
-   * - For 'none', target is ignored.
-   * - For all others, target must be a Unit.
-   * - All range, AP, and alive checks are included here.
+   * Validates if the spell can be cast on the target (targeting logic only).
    */
   canCast(caster: Unit, target: Unit | null, context?: { map?: any, cellPosition?: { x: number, y: number } }): boolean {
     // Range and AP checks (if needed)
@@ -123,93 +105,20 @@ export class Spell {
   }
 
   /**
-   * Executes the spell effect, handling both Unit and empty cell targets based on targetType.
-   * - For Unit targets: applies damage, heal, drain, etc.
-   * - For empty cell targets: applies effects like teleport, traps, etc.
-   * - Feedback visual is shown in both cases.
-   * - All logic is encapsulated here; BattleScene is agnostic.
+   * Applies the effect of the spell by delegating to EffectEngine.
+   * Passes the spell in the context so EffectEngine can access the cost.
    */
-  cast(caster: Unit, target: Unit | null, context?: { map?: any, scene?: any, cellPosition?: { x: number, y: number } }): boolean {
-    if (!this.canCast(caster, target, context)) return false;
-    caster.ap -= this.cost;
-    let effectText = '';
-    let color = '#ff4444';
-    let result = false;
-    // Handle Unit targets
-    if (target && (this.targetType === 'unit' || this.targetType === 'enemy' || this.targetType === 'ally' || this.targetType === 'selfOnly')) {
-      switch (this.effectType) {
-        case 'damage':
-          target.takeDamage(this.value);
-          effectText = `-${this.value} HP`;
-          color = '#ff4444';
-          result = true;
-          break;
-        case 'heal':
-          target.heal(this.value);
-          effectText = `+${this.value} HP`;
-          color = '#3ecf4a';
-          result = true;
-          break;
-        case 'drain_ap':
-          const lost = target.loseAP(this.value);
-          effectText = `-${lost} AP`;
-          color = '#3a8fff';
-          if (typeof target.preventAPRestore === 'function') target.preventAPRestore();
-          result = true;
-          break;
-        // Add more unit-based effects here
-      }
-      // Feedback visual for Unit
-      if (effectText) {
-        let container = (target as any).sceneContainer || (target as any).battleScene?.unitLayer || context?.scene?.unitLayer;
-        let sprite = (target as any).sprite || (target as any).getSprite?.();
-        let x = 0, y = 0;
-        if (sprite) {
-          x = sprite.x;
-          y = sprite.y - 32;
-        } else if (target.position) {
-          x = target.position.x * 64 + 32;
-          y = target.position.y * 64;
-        }
-        if (container) {
-          FloatingText.show(container, effectText, x, y, color);
-        }
-      }
-      return result;
-    }
-    // Handle empty cell targets (e.g., teleport)
-    if ((this.targetType === 'empty' || this.targetType === 'unitOrEmpty') && !target && context?.cellPosition) {
-      switch (this.effectType) {
-        case 'teleport': {
-          if (!context?.map || !context?.scene) return false;
-          const pos = context.cellPosition;
-          const map = context.map;
-          const walk = map.isWalkable(pos);
-          const occ = map.isOccupied(pos);
-          // --- Robust teleport: always update map occupation ---
-          // Free previous cell
-          map.setOccupied(caster.position, null);
-          // Move caster
-          caster.position = { ...pos };
-          // Mark new cell as occupied
-          map.setOccupied(pos, caster);
-          if (context.scene && typeof context.scene.updateUnitSprites === 'function') {
-            context.scene.updateUnitSprites();
-          }
-          effectText = `Teleport!`;
-          color = '#f1c40f';
-          result = true;
-          // Feedback visual at cell
-          if (context.scene?.unitLayer) {
-            FloatingText.show(context.scene.unitLayer, effectText, pos.x * 64 + 32, pos.y * 64, color);
-          }
-          break;
-        }
-        // Add more cell-based effects here
-      }
-      return result;
-    }
-    // Optionally handle 'none' or other future types
-    return false;
+  cast(
+    caster: Unit,
+    target: Unit | null,
+    context?: EffectContext
+  ): boolean {
+    return EffectEngine.applyEffect(
+      this.effectType,
+      caster,
+      target,
+      this.value,
+      { ...context, spell: this }
+    );
   }
 } 

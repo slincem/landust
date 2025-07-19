@@ -11,6 +11,16 @@ export interface Position {
   y: number;
 }
 
+// State type for extensible effects
+export interface State {
+  id: string; // Unique identifier
+  type: 'ap_loss' | 'mp_loss' | 'poison' | 'buff' | 'debuff' | string;
+  duration: number; // Turns remaining
+  value?: number;
+  source?: string;
+  stackable?: boolean;
+}
+
 /**
  * Represents a unit (player or enemy) on the board.
  * Each unit belongs to a team (faction) for targeting logic.
@@ -31,6 +41,9 @@ export class Unit {
   castsThisTurn: Record<string, number> = {};
   shouldRestoreAP: boolean = true;
   team: number;
+
+  /** List of active states on this unit */
+  public states: State[] = [];
 
   constructor(id: string, name: string, type: UnitType, position: Position, arg5?: number | UnitClass, arg6?: UnitClass) {
     this.id = id;
@@ -94,7 +107,10 @@ export class Unit {
     return this.hp > 0;
   }
 
-  takeDamage(amount: number) {
+  /**
+   * Called by EffectEngine to apply damage.
+   */
+  public takeDamage(amount: number) {
     this.hp -= amount;
     if (this.hp < 0) this.hp = 0;
   }
@@ -124,14 +140,63 @@ export class Unit {
     this.shouldRestoreAP = false;
   }
 
+  /**
+   * Apply a new state to the unit.
+   */
+  public applyState(state: State) {
+    // If not stackable, replace existing state of same type
+    if (!state.stackable) {
+      this.states = this.states.filter(s => s.type !== state.type);
+    }
+    this.states.push({ ...state });
+  }
+
+  /**
+   * Remove a state by id.
+   */
+  public removeState(id: string) {
+    this.states = this.states.filter(s => s.id !== id);
+  }
+
+  /**
+   * Check if the unit has a state of a given type.
+   */
+  public hasState(type: string): boolean {
+    return this.states.some(s => s.type === type);
+  }
+
+  /**
+   * Update all states: decrement duration, remove expired.
+   * Call this at the start of each turn.
+   */
+  public updateStates() {
+    for (let i = this.states.length - 1; i >= 0; i--) {
+      this.states[i].duration -= 1;
+      if (this.states[i].duration <= 0) {
+        this.states.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * Called at the start of the unit's turn.
+   * Restores AP/MP unless prevented by a state.
+   */
   startTurn(baseMP: number = 4) {
     this.mp = baseMP;
-    if (this.shouldRestoreAP) {
+    // Only restore AP if not under 'ap_loss' state
+    if (this.shouldRestoreAP && !this.hasState('ap_loss')) {
       this.ap = this.maxAP;
+    }
+    // Only restore MP if not under 'mp_loss' state (future-proof)
+    if (!this.hasState('mp_loss')) {
+      this.mp = this.maxMP;
     }
     this.shouldRestoreAP = true;
     this.resetSpellUsage();
     this.selectedSpellIdx = -1; // Require manual selection each turn
+    // Update states at the start of turn
+    this.updateStates();
   }
 
   restoreResources() {
@@ -158,7 +223,10 @@ export class Unit {
     }
   }
 
-  heal(amount: number) {
+  /**
+   * Called by EffectEngine to apply healing.
+   */
+  public heal(amount: number) {
     this.hp = Math.min(this.maxHP, this.hp + amount);
   }
 

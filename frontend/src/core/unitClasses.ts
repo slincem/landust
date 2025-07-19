@@ -1,5 +1,5 @@
 // Unit classes for the tactical RPG
-import { Spell, SpellEffectType } from './Spell';
+import { Spell } from './Spell';
 
 export interface UnitClass {
   name: string;
