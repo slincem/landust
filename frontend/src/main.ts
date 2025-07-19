@@ -1,9 +1,9 @@
 // Punto de entrada principal
-// Inicializa PixiJS, carga assets mínimos e invoca la escena inicial
+// Initialize PixiJS, load minimal assets and invoke the initial scene
 import { Game } from './game';
 import { BattleScene } from '@scenes/BattleScene';
 
-// Espera a que el DOM esté listo
+// Wait for DOM to be ready
 window.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('game-container');
   if (!container) {
@@ -14,7 +14,7 @@ window.addEventListener('DOMContentLoaded', () => {
   game.start().then(() => {
     // Instancia la escena de batalla y la agrega al stage
     const battleScene = new BattleScene();
-    // Se asume que el fondo ya está cargado por Game
+    // Background is assumed to be already loaded by Game
     game['app'].stage.addChild(battleScene);
   });
 }); 

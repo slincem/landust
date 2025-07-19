@@ -52,7 +52,7 @@ export class FloatingText extends Container {
   static show(container: Container, text: string, x: number, y: number, color: string | number, options: Partial<FloatingTextOptions> = {}) {
     const ft = new FloatingText(text, x, y, { ...options, color });
     container.addChild(ft);
-    // Animación: hook al ticker global de Pixi
+    // Animation: hook to Pixi's global ticker
     const ticker = (container as any).app?.ticker || (window as any).PIXI?.app?.ticker;
     if (ticker && typeof ticker.add === 'function') {
       const update = (delta: number) => {
@@ -61,7 +61,7 @@ export class FloatingText extends Container {
       };
       ticker.add(update);
     } else {
-      // Fallback: animación manual con setInterval
+      // Fallback: manual animation with setInterval
       let last = performance.now();
       const step = () => {
         const now = performance.now();

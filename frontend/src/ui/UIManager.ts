@@ -1,5 +1,5 @@
 // UIManager.ts
-// Maneja la UI HTML fuera del canvas principal (texto de turno y botón)
+// Manages HTML UI outside the main canvas (turn text and button)
 
 export class UIManager {
   private turnLabel: HTMLDivElement;
@@ -24,7 +24,7 @@ export class UIManager {
     // Texto de turno
     this.turnLabel = document.createElement('div');
     this.turnLabel.style.position = 'absolute';
-    this.turnLabel.style.top = '8px'; // Más arriba, fuera del área de juego
+    this.turnLabel.style.top = '8px'; // Higher up, outside the game area
     this.turnLabel.style.left = '50%';
     this.turnLabel.style.transform = 'translateX(-50%)';
     this.turnLabel.style.fontFamily = 'sans-serif';
@@ -38,7 +38,7 @@ export class UIManager {
     this.turnLabel.style.pointerEvents = 'none';
     uiRoot.appendChild(this.turnLabel);
 
-    // Botón de terminar turno
+    // End turn button
     this.endTurnButton = document.createElement('button');
     this.endTurnButton.textContent = 'Terminar turno';
     this.endTurnButton.style.position = 'absolute';

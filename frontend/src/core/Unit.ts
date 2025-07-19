@@ -102,7 +102,7 @@ export class Unit {
   canCastSpell(target: Unit): boolean {
     const spell = this.selectedSpell;
     if (!spell) return false;
-    // Lógica de límite de lanzamientos
+    // Spell usage limit logic
     const casts = this.castsThisTurn[spell.name] ?? 0;
     if (spell.maxCastsPerTurn !== -1 && casts >= spell.maxCastsPerTurn) return false;
     return spell.canCast(this, target);

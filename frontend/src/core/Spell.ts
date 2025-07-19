@@ -73,59 +73,32 @@ export class Spell {
    * - All range, AP, and alive checks are included here.
    */
   canCast(caster: Unit, target: Unit | null, context?: { map?: any, cellPosition?: { x: number, y: number } }): boolean {
-    console.log('[canCast]', this.name, 'targetType:', this.targetType, 'caster:', caster.name, 'target:', target?.name || 'null');
-    
     // Range and AP checks (if needed)
     if (this.targetType !== 'none') {
-      if (!target && this.targetType !== 'empty' && this.targetType !== 'unitOrEmpty') {
-        console.log('[canCast] No target for non-empty spell');
-        return false;
-      }
+      if (!target && this.targetType !== 'empty' && this.targetType !== 'unitOrEmpty') return false;
       const pos = target ? target.position : context?.cellPosition;
-      if (!pos) {
-        console.log('[canCast] No position available');
-        return false;
-      }
+      if (!pos) return false;
       const dx = Math.abs(caster.position.x - pos.x);
       const dy = Math.abs(caster.position.y - pos.y);
       const dist = Math.max(dx, dy);
-      console.log('[canCast] Distance:', dist, 'range:', this.range, 'minRange:', this.minRange, 'AP:', caster.ap, 'cost:', this.cost);
-      if (dist > this.range || dist < this.minRange) {
-        console.log('[canCast] Distance check failed');
-        return false;
-      }
-      if (caster.ap < this.cost) {
-        console.log('[canCast] AP check failed');
-        return false;
-      }
+      if (dist > this.range || dist < this.minRange) return false;
+      if (caster.ap < this.cost) return false;
     }
     
     switch (this.targetType) {
       case 'unit':
-        const unitResult = !!target && target.isAlive();
-        console.log('[canCast][unit] result:', unitResult);
-        return unitResult;
+        return !!target && target.isAlive();
       case 'enemy':
-        const enemyResult = !!target && target.isAlive() && caster.isEnemyOf(target);
-        console.log('[canCast][enemy] result:', enemyResult);
-        return enemyResult;
+        return !!target && target.isAlive() && caster.isEnemyOf(target);
       case 'ally':
-        const allyResult = !!target && target.isAlive() && caster.isAllyOf(target);
-        console.log('[canCast][ally] result:', allyResult);
-        return allyResult;
+        return !!target && target.isAlive() && caster.isAllyOf(target);
       case 'selfOnly':
-        const selfResult = !!target && target.isAlive() && caster.isSelf(target);
-        console.log('[canCast][selfOnly] target alive:', target?.isAlive(), 'isSelf:', caster.isSelf(target), 'result:', selfResult);
-        return selfResult;
+        return !!target && target.isAlive() && caster.isSelf(target);
       case 'unitOrEmpty':
-        if (target && target.isAlive()) {
-          console.log('[canCast][unitOrEmpty] unit alive, returning true');
-          return true;
-        }
+        if (target && target.isAlive()) return true;
         if (context?.map && context.cellPosition) {
           const walk = context.map.isWalkable(context.cellPosition);
           const occ = context.map.isOccupied(context.cellPosition);
-          console.log('[canCast][unitOrEmpty] cell', context.cellPosition, 'walkable:', walk, 'occupied:', occ);
           return walk && !occ;
         }
         return false;
@@ -133,7 +106,6 @@ export class Spell {
         if (!context?.map || !context.cellPosition) return false;
         const walk = context.map.isWalkable(context.cellPosition);
         const occ = context.map.isOccupied(context.cellPosition);
-        console.log('[canCast][empty] cell', context.cellPosition, 'walkable:', walk, 'occupied:', occ);
         return walk && !occ;
       case 'none':
         return true;
@@ -213,7 +185,6 @@ export class Spell {
           const pos = context.cellPosition;
           const walk = context.map.isWalkable(pos);
           const occ = context.map.isOccupied(pos);
-          console.log('[cast][teleport] cell', pos, 'walkable:', walk, 'occupied:', occ);
           if (walk && !occ) {
             caster.position = { ...pos };
             if (context.scene && typeof context.scene.updateUnitSprites === 'function') {
@@ -226,9 +197,6 @@ export class Spell {
             if (context.scene?.unitLayer) {
               FloatingText.show(context.scene.unitLayer, effectText, pos.x * 64 + 32, pos.y * 64, color);
             }
-            console.log('[cast][teleport] Teleport successful to', pos);
-          } else {
-            console.log('[cast][teleport] Teleport failed: cell not walkable or occupied', pos);
           }
           break;
         // Add more cell-based effects here

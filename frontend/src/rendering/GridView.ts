@@ -34,10 +34,10 @@ export class GridView extends Container {
     this.addChild(this.highlightLayer);
     this.addChild(this.pathLayer);
     this.eventMode = 'static'; // Asegura que el grid reciba eventos
-    // El hitArea invisible debe estar detrás de todo
+    // The invisible hitArea must be behind everything
     this.setChildIndex(hitArea, 0);
     // Opcional: puedes asignar this.hitArea = ... para legacy Pixi
-    console.log('GridView creado en (0,0), tamaño:', this.options.width * this.options.cellSize, this.options.height * this.options.cellSize);
+
   }
 
   /** Draws the base grid lines */
@@ -85,7 +85,7 @@ export class GridView extends Container {
       );
       this.pathLayer.endFill();
     }
-    // Dibuja línea sobre el centro de cada celda del camino
+    // Draw line over the center of each cell in the path
     if (path.length > 1) {
       this.pathLayer.lineStyle(4, 0x33ff66, 0.8);
       const getCenter = (cell: Position) => [

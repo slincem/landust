@@ -15,7 +15,7 @@ export class Game {
   }
 
   async start() {
-    // Inicializa PixiJS con tamaño mínimo 880x720 (grid 640x640 + espacio para barra de hechizos)
+    // Initialize PixiJS with minimum size 880x720 (grid 640x640 + space for spell bar)
     await this.app.init({
       width: 720,
       height: 880,
@@ -30,7 +30,7 @@ export class Game {
     this.app.canvas.style.boxShadow = '0 0 32px #000a';
     // Carga los recursos iniciales
     await loadInitialAssets();
-    // Aquí podrías cambiar a la escena inicial (menú, combate, etc.)
+    // Here you could change to the initial scene (menu, combat, etc.)
     this.showInitialScene();
   }
 

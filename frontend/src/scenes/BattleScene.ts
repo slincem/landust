@@ -65,7 +65,7 @@ export class BattleScene extends Container {
     // Game logic
     this.grid = new Grid(10, 10);
     this.map = new MapGrid(10, 10);
-    // Selección aleatoria de clases para los dos jugadores
+    // Random class selection for the two players
     const classNames = Object.keys(UnitClasses);
     const idx1 = Math.floor(Math.random() * classNames.length);
     let idx2 = Math.floor(Math.random() * classNames.length);
@@ -249,7 +249,6 @@ export class BattleScene extends Container {
             // Special color for self-heal
             if (spell.targetType === 'selfOnly' && caster.id === target.id) {
               color = 0x3ecf4a; // Green for self-heal
-              console.log('[updateReachableAndHighlights] Self-heal valid at', pos, 'for', caster.name);
             } else {
               color = spell.effectType === 'heal' ? 0x3ecf4a : 0xff4444;
             }
@@ -443,7 +442,7 @@ export class BattleScene extends Container {
       this.clearEnemyHighlights();
       this.gridView.showPath([]);
     });
-    // Click on the grid for teleport, heal, o daño
+    // Click on the grid for teleport, heal, or damage
     this.gridView.on('pointerdown', async (e: any) => {
       if (this.isMoving) return;
       const caster = this.turnManager.getCurrentUnit();
@@ -553,10 +552,7 @@ export class BattleScene extends Container {
         sprite.on('pointerdown', () => {
           this.handleSpellCast(unit, unit.position);
         });
-        // Debug log for self-heal
-        if (spell.targetType === 'selfOnly' && caster.id === unit.id) {
-          console.log('[setupSpellListeners] Self-heal listener assigned for', caster.name, 'at', unit.position);
-        }
+
       }
     }
   }
