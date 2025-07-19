@@ -80,7 +80,7 @@ export const UnitClasses: Record<string, UnitClass> = {
         name: 'Restore',
         cost: 5,
         range: 3,
-        minRange: 1,
+        minRange: 0,
         effectType: 'heal',
         value: 40,
         maxCastsPerTurn: 2,

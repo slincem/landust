@@ -73,28 +73,55 @@ export class Spell {
    * - All range, AP, and alive checks are included here.
    */
   canCast(caster: Unit, target: Unit | null, context?: { map?: any, cellPosition?: { x: number, y: number } }): boolean {
+    console.log('[canCast]', this.name, 'targetType:', this.targetType, 'caster:', caster.name, 'target:', target?.name || 'null');
+    
     // Range and AP checks (if needed)
     if (this.targetType !== 'none') {
-      if (!target && this.targetType !== 'empty' && this.targetType !== 'unitOrEmpty') return false;
+      if (!target && this.targetType !== 'empty' && this.targetType !== 'unitOrEmpty') {
+        console.log('[canCast] No target for non-empty spell');
+        return false;
+      }
       const pos = target ? target.position : context?.cellPosition;
-      if (!pos) return false;
+      if (!pos) {
+        console.log('[canCast] No position available');
+        return false;
+      }
       const dx = Math.abs(caster.position.x - pos.x);
       const dy = Math.abs(caster.position.y - pos.y);
       const dist = Math.max(dx, dy);
-      if (dist > this.range || dist < this.minRange) return false;
-      if (caster.ap < this.cost) return false;
+      console.log('[canCast] Distance:', dist, 'range:', this.range, 'minRange:', this.minRange, 'AP:', caster.ap, 'cost:', this.cost);
+      if (dist > this.range || dist < this.minRange) {
+        console.log('[canCast] Distance check failed');
+        return false;
+      }
+      if (caster.ap < this.cost) {
+        console.log('[canCast] AP check failed');
+        return false;
+      }
     }
+    
     switch (this.targetType) {
       case 'unit':
-        return !!target && target.isAlive();
+        const unitResult = !!target && target.isAlive();
+        console.log('[canCast][unit] result:', unitResult);
+        return unitResult;
       case 'enemy':
-        return !!target && target.isAlive() && caster.isEnemyOf(target);
+        const enemyResult = !!target && target.isAlive() && caster.isEnemyOf(target);
+        console.log('[canCast][enemy] result:', enemyResult);
+        return enemyResult;
       case 'ally':
-        return !!target && target.isAlive() && caster.isAllyOf(target);
+        const allyResult = !!target && target.isAlive() && caster.isAllyOf(target);
+        console.log('[canCast][ally] result:', allyResult);
+        return allyResult;
       case 'selfOnly':
-        return !!target && target.isAlive() && caster.isSelf(target);
+        const selfResult = !!target && target.isAlive() && caster.isSelf(target);
+        console.log('[canCast][selfOnly] target alive:', target?.isAlive(), 'isSelf:', caster.isSelf(target), 'result:', selfResult);
+        return selfResult;
       case 'unitOrEmpty':
-        if (target && target.isAlive()) return true;
+        if (target && target.isAlive()) {
+          console.log('[canCast][unitOrEmpty] unit alive, returning true');
+          return true;
+        }
         if (context?.map && context.cellPosition) {
           const walk = context.map.isWalkable(context.cellPosition);
           const occ = context.map.isOccupied(context.cellPosition);

@@ -234,16 +234,25 @@ export class BattleScene extends Container {
           let isValid = false;
           let color = 0xff4444;
           let target = this.units.find(u => u.position.x === x && u.position.y === y) || null;
+          
+          // Handle empty cell targeting (teleport, etc.)
           if (spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') {
-            // Puede ser celda vacía
             if (!target && spell.canCast(caster, null, { map: this.map, cellPosition: pos })) {
               isValid = true;
               color = 0xf1c40f;
             }
           }
+          
+          // Handle unit targeting (including self-heal)
           if (target && spell.canCast(caster, target, { map: this.map, cellPosition: pos })) {
             isValid = true;
-            color = spell.effectType === 'heal' ? 0x3ecf4a : 0xff4444;
+            // Special color for self-heal
+            if (spell.targetType === 'selfOnly' && caster.id === target.id) {
+              color = 0x3ecf4a; // Green for self-heal
+              console.log('[updateReachableAndHighlights] Self-heal valid at', pos, 'for', caster.name);
+            } else {
+              color = spell.effectType === 'heal' ? 0x3ecf4a : 0xff4444;
+            }
           }
           if (isValid) {
             this.reachable.push({ x, y });
@@ -528,17 +537,26 @@ export class BattleScene extends Container {
    * Uses a helper to apply listeners and visual feedback.
    */
   private setupSpellListeners() {
+    const caster = this.turnManager.getCurrentUnit();
+    const spell = caster.selectedSpell;
     for (const unit of this.units) {
       const sprite = this.unitSprites.get(unit.id);
       if (!sprite) continue;
       sprite.removeAllListeners && sprite.removeAllListeners('pointerdown');
       sprite.eventMode = 'none';
       sprite.cursor = '';
-      const caster = this.turnManager.getCurrentUnit();
-      const spell = caster.selectedSpell;
       if (!spell || caster.ap < spell.cost) continue;
+      // Use only spell.canCast for all targeting (including self-heal)
       if (this.isCellReachable(unit.position, caster) && spell.canCast(caster, unit, { map: this.map, cellPosition: unit.position })) {
-        this.applySpellListener(sprite, caster, unit, spell);
+        sprite.eventMode = 'static';
+        sprite.cursor = 'pointer';
+        sprite.on('pointerdown', () => {
+          this.handleSpellCast(unit, unit.position);
+        });
+        // Debug log for self-heal
+        if (spell.targetType === 'selfOnly' && caster.id === unit.id) {
+          console.log('[setupSpellListeners] Self-heal listener assigned for', caster.name, 'at', unit.position);
+        }
       }
     }
   }
