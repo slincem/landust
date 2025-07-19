@@ -180,25 +180,31 @@ export class Spell {
     // Handle empty cell targets (e.g., teleport)
     if ((this.targetType === 'empty' || this.targetType === 'unitOrEmpty') && !target && context?.cellPosition) {
       switch (this.effectType) {
-        case 'teleport':
+        case 'teleport': {
           if (!context?.map || !context?.scene) return false;
           const pos = context.cellPosition;
-          const walk = context.map.isWalkable(pos);
-          const occ = context.map.isOccupied(pos);
-          if (walk && !occ) {
-            caster.position = { ...pos };
-            if (context.scene && typeof context.scene.updateUnitSprites === 'function') {
-              context.scene.updateUnitSprites();
-            }
-            effectText = `Teleport!`;
-            color = '#f1c40f';
-            result = true;
-            // Feedback visual at cell
-            if (context.scene?.unitLayer) {
-              FloatingText.show(context.scene.unitLayer, effectText, pos.x * 64 + 32, pos.y * 64, color);
-            }
+          const map = context.map;
+          const walk = map.isWalkable(pos);
+          const occ = map.isOccupied(pos);
+          // --- Robust teleport: always update map occupation ---
+          // Free previous cell
+          map.setOccupied(caster.position, null);
+          // Move caster
+          caster.position = { ...pos };
+          // Mark new cell as occupied
+          map.setOccupied(pos, caster);
+          if (context.scene && typeof context.scene.updateUnitSprites === 'function') {
+            context.scene.updateUnitSprites();
+          }
+          effectText = `Teleport!`;
+          color = '#f1c40f';
+          result = true;
+          // Feedback visual at cell
+          if (context.scene?.unitLayer) {
+            FloatingText.show(context.scene.unitLayer, effectText, pos.x * 64 + 32, pos.y * 64, color);
           }
           break;
+        }
         // Add more cell-based effects here
       }
       return result;
