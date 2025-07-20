@@ -110,10 +110,14 @@ export const UnitClasses: Record<string, UnitClass> = {
         cost: 4,
         range: 3,
         minRange: 1,
-        effectType: 'drain_ap',
-        value: 2,
         maxCastsPerTurn: -1,
-        targetType: 'enemy'
+        targetType: 'enemy',
+        effect: {
+          type: 'drain_ap',
+          value: 2,
+          duration: 1,
+          expire: 'end'
+        }
       }),
       new Spell({
         name: 'TimeJump',

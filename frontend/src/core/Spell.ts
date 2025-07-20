@@ -15,16 +15,24 @@ export type SpellTargetType =
   | 'empty'
   | 'none';
 
+export interface SpellEffectConfig {
+  type: EffectType;
+  value: number;
+  duration?: number;
+  expire?: 'start' | 'end';
+  // Add more effect params as needed
+}
+
 export interface SpellConfig {
   name: string;
   cost: number;
   range: number;
   minRange?: number;
-  effectType: EffectType;
-  value: number;
   maxCastsPerTurn?: number;
   targetType: string;
-  // Add more config options as needed (area, conditions, etc)
+  effectType?: EffectType; // for backward compatibility
+  value?: number; // for backward compatibility
+  effect?: SpellEffectConfig; // new, preferred
 }
 
 /**
@@ -39,16 +47,18 @@ export class Spell {
   value: number;
   maxCastsPerTurn: number;
   targetType: string;
+  effect?: SpellEffectConfig;
 
   constructor(config: SpellConfig) {
     this.name = config.name;
     this.cost = config.cost;
     this.range = config.range;
     this.minRange = config.minRange ?? 1;
-    this.effectType = config.effectType;
-    this.value = config.value;
+    this.effectType = config.effectType ?? config.effect?.type ?? 'damage';
+    this.value = config.value ?? config.effect?.value ?? 0;
     this.maxCastsPerTurn = config.maxCastsPerTurn ?? 1;
     this.targetType = config.targetType;
+    this.effect = config.effect;
   }
 
   /**
@@ -106,7 +116,7 @@ export class Spell {
 
   /**
    * Applies the effect of the spell by delegating to EffectEngine.
-   * Passes the spell in the context so EffectEngine can access the cost.
+   * Passes the full spell (this) so EffectEngine can extract all effect params.
    */
   cast(
     caster: Unit,
@@ -114,11 +124,10 @@ export class Spell {
     context?: EffectContext
   ): boolean {
     return EffectEngine.applyEffect(
-      this.effectType,
+      this,
       caster,
       target,
-      this.value,
-      { ...context, spell: this }
+      context
     );
   }
 } 

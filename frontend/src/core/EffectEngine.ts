@@ -17,34 +17,54 @@ export interface EffectContext {
 export class EffectEngine {
   /**
    * Applies the effect of a spell, consumes AP, and shows feedback visual.
-   * @param effectType The type of effect (damage, heal, etc)
+   * @param spell The full Spell object containing effect details.
    * @param caster The unit casting the spell
    * @param target The target unit (or null for cell effects)
-   * @param value The value of the effect (damage amount, heal amount, etc)
    * @param context Additional context (map, scene, cellPosition, etc)
    * @returns true if the effect was applied, false otherwise
    */
   static applyEffect(
-    effectType: EffectType,
+    spell: { effectType: EffectType, value: number, cost: number, effect?: any },
     caster: Unit,
     target: Unit | null,
-    value: number,
-    context?: EffectContext & { spell?: { cost: number } }
+    context?: EffectContext
   ): boolean {
-    // 1. Restar AP del caster (si tiene suficientes)
-    const spellCost = context?.spell?.cost ?? 0;
+    // 1. Get effect config from spell
+    const effect = spell.effect ?? {};
+    const effectType: EffectType = effect.type ?? spell.effectType;
+    const value: number = effect.value ?? spell.value;
+    const duration: number = effect.duration ?? 1;
+    const expire: 'start' | 'end' = effect.expire ?? 'start';
+    const spellCost = spell.cost ?? 0;
+    // 2. Subtract AP
     if (spellCost > 0) {
       if (caster.ap < spellCost) return false;
       caster.ap -= spellCost;
     }
-
     let effectText = '';
     let color = '#ff4444';
     let feedbackPos = { x: 0, y: 0 };
     let feedbackLayer = context?.scene?.unitLayer;
     let result = false;
-
     switch (effectType) {
+      case 'drain_ap':
+        if (target) {
+          target.loseAP(value);
+          // Apply a temporary 'ap_loss' state with configurable duration/expire
+          const state: State = {
+            id: `ap_loss_${Date.now()}_${Math.random()}`,
+            type: 'ap_loss',
+            duration,
+            value,
+            expire
+          };
+          target.applyState(state);
+          effectText = `-${value} AP`;
+          color = '#3a8fff';
+          feedbackPos = EffectEngine.getTargetPos(target);
+          result = true;
+        }
+        break;
       case 'damage':
         if (target) {
           target.takeDamage(value);
@@ -80,34 +100,14 @@ export class EffectEngine {
           }
         }
         break;
-      case 'drain_ap':
-        if (target) {
-          target.loseAP(value);
-          // Apply a temporary 'ap_loss' state so AP is not restored next turn; expires at end of turn
-          const state: State = {
-            id: `ap_loss_${Date.now()}_${Math.random()}`,
-            type: 'ap_loss',
-            duration: 1, // 1 turn
-            value: value,
-            expire: 'end' // Expire at the end of the target's next turn
-          };
-          target.applyState(state);
-          effectText = `-${value} AP`;
-          color = '#3a8fff';
-          feedbackPos = EffectEngine.getTargetPos(target);
-          result = true;
-        }
-        break;
       // TODO: Add buffs, debuffs, area, etc.
       default:
         break;
     }
-
-    // Mostrar feedback visual si corresponde
+    // Show feedback visual if needed
     if (effectText && feedbackLayer) {
       FloatingText.show(feedbackLayer, effectText, feedbackPos.x, feedbackPos.y, color);
     }
-
     return result;
   }
 
