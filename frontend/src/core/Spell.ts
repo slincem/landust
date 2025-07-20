@@ -30,9 +30,7 @@ export interface SpellConfig {
   minRange?: number;
   maxCastsPerTurn?: number;
   targetType: string;
-  effectType?: EffectType; // for backward compatibility
-  value?: number; // for backward compatibility
-  effect?: SpellEffectConfig; // new, preferred
+  effects: SpellEffectConfig[];
 }
 
 /**
@@ -43,22 +41,18 @@ export class Spell {
   cost: number;
   range: number;
   minRange: number;
-  effectType: EffectType;
-  value: number;
   maxCastsPerTurn: number;
   targetType: string;
-  effect?: SpellEffectConfig;
+  effects: SpellEffectConfig[];
 
   constructor(config: SpellConfig) {
     this.name = config.name;
     this.cost = config.cost;
     this.range = config.range;
     this.minRange = config.minRange ?? 1;
-    this.effectType = config.effectType ?? config.effect?.type ?? 'damage';
-    this.value = config.value ?? config.effect?.value ?? 0;
     this.maxCastsPerTurn = config.maxCastsPerTurn ?? 1;
     this.targetType = config.targetType;
-    this.effect = config.effect;
+    this.effects = config.effects;
   }
 
   /**
@@ -115,19 +109,13 @@ export class Spell {
   }
 
   /**
-   * Applies the effect of the spell by delegating to EffectEngine.
-   * Passes the full spell (this) so EffectEngine can extract all effect params.
+   * Applies all effects of the spell by delegating to EffectEngine.
    */
   cast(
     caster: Unit,
     target: Unit | null,
     context?: EffectContext
   ): boolean {
-    return EffectEngine.applyEffect(
-      this,
-      caster,
-      target,
-      context
-    );
+    return EffectEngine.applySpell(this, caster, target, context);
   }
 } 

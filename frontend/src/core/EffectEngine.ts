@@ -3,6 +3,7 @@
 
 import type { Unit } from './Unit';
 import type { State } from './Unit';
+import type { SpellEffectConfig } from './Spell';
 import { FloatingText } from '../ui/FloatingText';
 
 export type EffectType = 'damage' | 'heal' | 'teleport' | 'buff' | 'debuff' | 'drain_ap';
@@ -24,23 +25,15 @@ export class EffectEngine {
    * @returns true if the effect was applied, false otherwise
    */
   static applyEffect(
-    spell: { effectType: EffectType, value: number, cost: number, effect?: any },
+    effect: SpellEffectConfig,
     caster: Unit,
     target: Unit | null,
     context?: EffectContext
   ): boolean {
-    // 1. Get effect config from spell
-    const effect = spell.effect ?? {};
-    const effectType: EffectType = effect.type ?? spell.effectType;
-    const value: number = effect.value ?? spell.value;
+    const effectType: EffectType = effect.type;
+    const value: number = effect.value;
     const duration: number = effect.duration ?? 1;
     const expire: 'start' | 'end' = effect.expire ?? 'start';
-    const spellCost = spell.cost ?? 0;
-    // 2. Subtract AP
-    if (spellCost > 0) {
-      if (caster.ap < spellCost) return false;
-      caster.ap -= spellCost;
-    }
     let effectText = '';
     let color = '#ff4444';
     let feedbackPos = { x: 0, y: 0 };
@@ -50,7 +43,6 @@ export class EffectEngine {
       case 'drain_ap':
         if (target) {
           target.loseAP(value);
-          // Apply a temporary 'ap_loss' state with configurable duration/expire
           const state: State = {
             id: `ap_loss_${Date.now()}_${Math.random()}`,
             type: 'ap_loss',
@@ -104,11 +96,33 @@ export class EffectEngine {
       default:
         break;
     }
-    // Show feedback visual if needed
     if (effectText && feedbackLayer) {
       FloatingText.show(feedbackLayer, effectText, feedbackPos.x, feedbackPos.y, color);
     }
     return result;
+  }
+
+  /**
+   * Applies all effects of a spell, in order.
+   * Subtracts AP only once for the whole spell.
+   */
+  static applySpell(
+    spell: { effects: SpellEffectConfig[], cost: number },
+    caster: Unit,
+    target: Unit | null,
+    context?: EffectContext
+  ): boolean {
+    // Subtract AP once for the whole spell
+    if (spell.cost > 0) {
+      if (caster.ap < spell.cost) return false;
+      caster.ap -= spell.cost;
+    }
+    let anyEffect = false;
+    for (const effect of spell.effects) {
+      const result = EffectEngine.applyEffect(effect, caster, target, context);
+      anyEffect = anyEffect || result;
+    }
+    return anyEffect;
   }
 
   /**

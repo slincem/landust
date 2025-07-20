@@ -23,20 +23,22 @@ export const UnitClasses: Record<string, UnitClass> = {
         cost: 2,
         range: 1,
         minRange: 1,
-        effectType: 'damage',
-        value: 35,
         maxCastsPerTurn: 2,
-        targetType: 'enemy'
+        targetType: 'enemy',
+        effects: [
+          { type: 'damage', value: 35 }
+        ]
       }),
       new Spell({
         name: 'Charge',
         cost: 3,
         range: 4,
         minRange: 1,
-        effectType: 'damage',
-        value: 20,
         maxCastsPerTurn: 1,
-        targetType: 'enemy'
+        targetType: 'enemy',
+        effects: [
+          { type: 'damage', value: 20 }
+        ]
       }),
     ],
     color: 0xc0392b,
@@ -52,20 +54,22 @@ export const UnitClasses: Record<string, UnitClass> = {
         cost: 3,
         range: 4,
         minRange: 1,
-        effectType: 'damage',
-        value: 28,
         maxCastsPerTurn: 2,
-        targetType: 'enemy'
+        targetType: 'enemy',
+        effects: [
+          { type: 'damage', value: 28 }
+        ]
       }),
       new Spell({
         name: 'SlowArrow',
         cost: 4,
         range: 3,
         minRange: 1,
-        effectType: 'damage',
-        value: 15,
         maxCastsPerTurn: 1,
-        targetType: 'enemy'
+        targetType: 'enemy',
+        effects: [
+          { type: 'damage', value: 15 }
+        ]
       }),
     ],
     color: 0x2980b9,
@@ -81,20 +85,22 @@ export const UnitClasses: Record<string, UnitClass> = {
         cost: 5,
         range: 3,
         minRange: 0,
-        effectType: 'heal',
-        value: 40,
         maxCastsPerTurn: 2,
-        targetType: 'selfOnly'
+        targetType: 'selfOnly',
+        effects: [
+          { type: 'heal', value: 40 }
+        ]
       }),
       new Spell({
         name: 'SpiritWave',
         cost: 4,
         range: 2,
         minRange: 1,
-        effectType: 'damage',
-        value: 20,
         maxCastsPerTurn: 1,
-        targetType: 'enemy'
+        targetType: 'enemy',
+        effects: [
+          { type: 'damage', value: 20 }
+        ]
       }),
     ],
     color: 0x27ae60,
@@ -112,22 +118,20 @@ export const UnitClasses: Record<string, UnitClass> = {
         minRange: 1,
         maxCastsPerTurn: -1,
         targetType: 'enemy',
-        effect: {
-          type: 'drain_ap',
-          value: 2,
-          duration: 1,
-          expire: 'end'
-        }
+        effects: [
+          { type: 'drain_ap', value: 2, duration: 1, expire: 'end' }
+        ]
       }),
       new Spell({
         name: 'TimeJump',
         cost: 3,
         range: 3,
         minRange: 1,
-        effectType: 'teleport',
-        value: 0,
         maxCastsPerTurn: 1,
-        targetType: 'empty'
+        targetType: 'empty',
+        effects: [
+          { type: 'teleport', value: 0 }
+        ]
       }),
     ],
     color: 0xf1c40f,
