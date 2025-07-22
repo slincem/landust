@@ -9,6 +9,29 @@ import { Container, Graphics, Text, TextStyle, Sprite, Texture, SCALE_MODES } fr
 import { UIManager } from '@ui/UIManager';
 import { MapGrid } from '@core/MapGrid';
 import { Spell } from '@core/Spell';
+import type { EffectType } from '@core/EffectEngine';
+
+/**
+ * Returns the tint color for a given effect type for target highlighting.
+ * Easily extensible for new effect types.
+ */
+function getTargetTint(effectType: EffectType): number {
+  switch (effectType) {
+    case 'damage':
+      return 0xff4444; // Red
+    case 'heal':
+      return 0x3ecf4a; // Green
+    case 'buff_ap':
+      return 0x3a8fff; // Light blue
+    case 'drain_ap':
+      return 0x6a5acd; // Purple
+    case 'teleport':
+      return 0xf1c40f; // Yellow
+    // Add more cases for new effect types as needed
+    default:
+      return 0xffffff; // Default to white (no tint)
+  }
+}
 
 export class BattleScene extends Container {
   private grid: Grid;
@@ -246,12 +269,9 @@ export class BattleScene extends Container {
           // Handle unit targeting (including self-heal)
           if (target && spell.canCast(caster, target, { map: this.map, cellPosition: pos })) {
             isValid = true;
-            // Special color for self-heal
-            if (spell.targetType === 'selfOnly' && caster.id === target.id) {
-              color = 0x3ecf4a; // Green for self-heal
-            } else {
-              color = spell.effectType === 'heal' ? 0x3ecf4a : 0xff4444;
-            }
+            // Use the first effect type as reference for tint
+            const mainEffectType = spell.effects[0]?.type as EffectType;
+            color = getTargetTint(mainEffectType);
           }
           if (isValid) {
             this.reachable.push({ x, y });
@@ -413,7 +433,9 @@ export class BattleScene extends Container {
           } else {
             const target = this.units.find(u => u.position.x === mouseCell.x && u.position.y === mouseCell.y);
             if (target && selectedSpell.canCast(unit, target)) {
-              let color = selectedSpell.effectType === 'heal' ? 0x3ecf4a : 0xff4444;
+              // Use the first effect type as reference for tint
+              const mainEffectType = selectedSpell.effects[0]?.type as EffectType;
+              let color = getTargetTint(mainEffectType);
               const sprite = this.unitSprites.get(target.id);
               if (sprite) sprite.tint = color;
             }
