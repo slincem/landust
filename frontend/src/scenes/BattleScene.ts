@@ -10,6 +10,7 @@ import { UIManager } from '@ui/UIManager';
 import { MapGrid } from '@core/MapGrid';
 import { Spell } from '@core/Spell';
 import type { EffectType } from '@core/EffectEngine';
+import { BattleVisuals } from './BattleVisuals';
 
 /**
  * Returns the tint color for a given effect type for target highlighting.
@@ -36,7 +37,7 @@ function getTargetTint(effectType: EffectType): number {
 export class BattleScene extends Container {
   private grid: Grid;
   private units: Unit[];
-  private unitSprites: Map<string, Container> = new Map();
+  private unitSprites: Map<string, Sprite> = new Map();
   private gridView: GridView;
   private turnManager: TurnManager;
   private reachable: Position[] = [];
@@ -179,7 +180,7 @@ export class BattleScene extends Container {
       sprite.x = unit.position.x * 64 + 32;
       sprite.y = unit.position.y * 64 + 32;
       sprite.eventMode = 'none';
-      this.unitSprites.set(unit.id, sprite as unknown as Container);
+      this.unitSprites.set(unit.id, sprite);
       this.unitLayer.addChild(sprite);
       // HP and AP bars
       const bar = new Graphics();
@@ -234,6 +235,16 @@ export class BattleScene extends Container {
   }
 
   /**
+   * Returns true if the cell is in Manhattan range for the given spell.
+   */
+  private isCellInSpellRange(caster: Unit, spell: Spell, pos: Position): boolean {
+    const dx = Math.abs(caster.position.x - pos.x);
+    const dy = Math.abs(caster.position.y - pos.y);
+    const dist = dx + dy;
+    return dist <= spell.range && dist >= spell.minRange;
+  }
+
+  /**
    * Orchestrates the battle scene: grid, player, interaction, and rendering.
    * All targeting and spell logic is delegated to Spell and Unit.
    */
@@ -244,49 +255,44 @@ export class BattleScene extends Container {
     this.moveRangeLayer.clear();
     this.reachable = [];
     if (spell && caster.ap >= spell.cost) {
+      // First, show all cells in spell range (Manhattan distance)
       for (let x = 0; x < 10; x++) {
         for (let y = 0; y < 10; y++) {
           const pos = { x, y };
-          const dx = Math.abs(caster.position.x - x);
-          const dy = Math.abs(caster.position.y - y);
-          const dist = Math.max(dx, dy);
-          if (dist > spell.range || dist < spell.minRange) continue;
-          this.spellRangeLayer.beginFill(0x66ccff, 0.10);
-          this.spellRangeLayer.drawRect(x * 64, y * 64, 64, 64);
-          this.spellRangeLayer.endFill();
+          if (!this.isCellInSpellRange(caster, spell, pos)) continue;
+          // Show area of effect (all in range) with low alpha
+          BattleVisuals.highlightTargetCell(this.spellRangeLayer, pos, 0x888888, 0.10);
+        }
+      }
+      // Now, highlight valid targets with effect color
+      for (let x = 0; x < 10; x++) {
+        for (let y = 0; y < 10; y++) {
+          const pos = { x, y };
+          if (!this.isCellInSpellRange(caster, spell, pos)) continue;
           let isValid = false;
           let color = 0xff4444;
           let target = this.units.find(u => u.position.x === x && u.position.y === y) || null;
-          
           // Handle empty cell targeting (teleport, etc.)
-          if (spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') {
-            if (!target && spell.canCast(caster, null, { map: this.map, cellPosition: pos })) {
-              isValid = true;
-              color = 0xf1c40f;
-            }
+          if ((spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') && !target && spell.canCast(caster, null, { map: this.map, cellPosition: pos })) {
+            isValid = true;
+            color = BattleVisuals.getTargetTint(spell.effects[0]?.type);
           }
-          
           // Handle unit targeting (including self-heal)
           if (target && spell.canCast(caster, target, { map: this.map, cellPosition: pos })) {
             isValid = true;
-            // Use the first effect type as reference for tint
-            const mainEffectType = spell.effects[0]?.type as EffectType;
-            color = getTargetTint(mainEffectType);
+            const mainEffectType = spell.effects[0]?.type;
+            color = BattleVisuals.getTargetTint(mainEffectType);
           }
           if (isValid) {
             this.reachable.push({ x, y });
-            this.spellRangeLayer.beginFill(color, 0.32);
-            this.spellRangeLayer.drawRect(x * 64, y * 64, 64, 64);
-            this.spellRangeLayer.endFill();
+            BattleVisuals.highlightTargetCell(this.spellRangeLayer, pos, color, 0.32);
           }
         }
       }
     } else {
       this.reachable = this.grid.getReachableCells(caster.position, caster.mp, this.map);
       for (const cell of this.reachable) {
-        this.moveRangeLayer.beginFill(0x3a8fff, 0.18);
-        this.moveRangeLayer.drawRect(cell.x * 64, cell.y * 64, 64, 64);
-        this.moveRangeLayer.endFill();
+        BattleVisuals.highlightTargetCell(this.moveRangeLayer, cell, 0x3a8fff, 0.18);
       }
     }
     this.gridView.showPath([]);
@@ -426,9 +432,7 @@ export class BattleScene extends Container {
           if (selectedSpell.effectType === 'teleport') {
             const dummyTarget = { position: mouseCell } as Unit;
             if (selectedSpell.canCast(unit, dummyTarget)) {
-              this.spellRangeLayer.beginFill(0xf1c40f, 0.28);
-              this.spellRangeLayer.drawRect(mouseCell.x * 64, mouseCell.y * 64, 64, 64);
-              this.spellRangeLayer.endFill();
+              BattleVisuals.highlightTargetCell(this.spellRangeLayer, mouseCell, 0xf1c40f);
             }
           } else {
             const target = this.units.find(u => u.position.x === mouseCell.x && u.position.y === mouseCell.y);
@@ -437,7 +441,7 @@ export class BattleScene extends Container {
               const mainEffectType = selectedSpell.effects[0]?.type as EffectType;
               let color = getTargetTint(mainEffectType);
               const sprite = this.unitSprites.get(target.id);
-              if (sprite) sprite.tint = color;
+              if (sprite) BattleVisuals.highlightUnitSprite(sprite, color);
             }
           }
         }
@@ -515,12 +519,7 @@ export class BattleScene extends Container {
 
   /** Clears enemy highlights */
   private clearEnemyHighlights() {
-    for (const other of this.units) {
-      const sprite = this.unitSprites.get(other.id);
-      if (sprite) {
-        sprite.tint = other.id === this.turnManager.getCurrentUnit().id ? 0xffffff : 0xcccccc;
-      }
-    }
+    BattleVisuals.resetAllUnitSpriteTints(this.units, this.unitSprites, this.turnManager.getCurrentUnit().id);
   }
 
   /** Shows a floating damage text over the target */
