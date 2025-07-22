@@ -17,6 +17,28 @@ export interface EffectContext {
 
 export class EffectEngine {
   /**
+   * Returns the color for a given effect type for floating feedback text.
+   * Easily extensible for new effect types.
+   */
+  static getEffectColor(effectType: EffectType): string {
+    switch (effectType) {
+      case 'damage':
+        return '#ff4444'; // Red
+      case 'heal':
+        return '#3ecf4a'; // Green
+      case 'buff_ap':
+        return '#3a8fff'; // Light blue
+      case 'drain_ap':
+        return '#6a5acd'; // Purple/blue (debuff)
+      case 'teleport':
+        return '#f1c40f'; // Yellow
+      // Add more cases for new effect types as needed
+      default:
+        return '#ff4444'; // Default to red
+    }
+  }
+
+  /**
    * Applies the effect of a spell, consumes AP, and shows feedback visual.
    * @param spell The full Spell object containing effect details.
    * @param caster The unit casting the spell
@@ -35,14 +57,15 @@ export class EffectEngine {
     const duration: number = effect.duration ?? 1;
     const expire: 'start' | 'end' = effect.expire ?? 'start';
     let effectText = '';
-    let color = '#ff4444';
+    // Use dynamic color based on effect type
+    let color = EffectEngine.getEffectColor(effectType);
     let feedbackPos = { x: 0, y: 0 };
     let feedbackLayer = context?.scene?.unitLayer;
     let result = false;
     switch (effectType) {
       case 'buff_ap':
         if (target) {
-          // No acumular si ya existe un buff_ap del mismo sourceSpell
+          // Do not stack if already exists from same source
           const sourceSpell = (effect as any).sourceSpell || (context && (context as any).sourceSpell) || (effect as any).spellName;
           const already = target.states.find(s => s.type === 'buff_ap' && s.source === sourceSpell);
           if (!already) {
@@ -56,7 +79,6 @@ export class EffectEngine {
             };
             target.applyState(state);
             effectText = `+${value} AP`;
-            color = '#42aaff';
             feedbackPos = EffectEngine.getTargetPos(target);
             result = true;
           }
@@ -74,7 +96,6 @@ export class EffectEngine {
           };
           target.applyState(state);
           effectText = `-${value} AP`;
-          color = '#3a8fff';
           feedbackPos = EffectEngine.getTargetPos(target);
           result = true;
         }
@@ -83,7 +104,6 @@ export class EffectEngine {
         if (target) {
           target.takeDamage(value);
           effectText = `-${value} HP`;
-          color = '#ff4444';
           feedbackPos = EffectEngine.getTargetPos(target);
           result = true;
         }
@@ -92,7 +112,6 @@ export class EffectEngine {
         if (target) {
           target.heal(value);
           effectText = `+${value} HP`;
-          color = '#3ecf4a';
           feedbackPos = EffectEngine.getTargetPos(target);
           result = true;
         }
@@ -108,7 +127,6 @@ export class EffectEngine {
               context.scene.updateUnitSprites();
             }
             effectText = `Teleport!`;
-            color = '#f1c40f';
             feedbackPos = { x: pos.x * 64 + 32, y: pos.y * 64 };
             result = true;
           }
@@ -116,10 +134,10 @@ export class EffectEngine {
         break;
       // TODO: Add buffs, debuffs, area, etc.
       default:
-        // Si el efecto no aplica (por ejemplo, target null), simplemente omitir
+        // If the effect does not apply (e.g., null target), just skip
         break;
     }
-    // Solo mostrar feedback si el efecto fue aplicado y hay target o posición válida
+    // Only show feedback if the effect was applied and there is a valid target or position
     if (effectText && feedbackLayer && result) {
       FloatingText.show(feedbackLayer, effectText, feedbackPos.x, feedbackPos.y, color);
     }
