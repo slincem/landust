@@ -7,12 +7,11 @@ import { EffectEngine, EffectType, EffectContext } from './EffectEngine';
 export type SpellEffectType = 'damage' | 'heal' | 'drain_ap' | 'teleport';
 
 export type SpellTargetType =
-  | 'unit'
-  | 'enemy'
-  | 'ally'
   | 'selfOnly'
-  | 'unitOrEmpty'
-  | 'empty'
+  | 'allyOnly'
+  | 'ally'
+  | 'enemy'
+  | 'unit'
   | 'none';
 
 export interface SpellEffectConfig {
@@ -21,6 +20,8 @@ export interface SpellEffectConfig {
   duration?: number;
   expire?: 'start' | 'end';
   // Add more effect params as needed
+  // NUEVO: para efectos que requieren saber el hechizo origen
+  sourceSpell?: string;
 }
 
 export interface SpellConfig {
@@ -31,6 +32,7 @@ export interface SpellConfig {
   maxCastsPerTurn?: number;
   targetType: string;
   effects: SpellEffectConfig[];
+  cooldown?: number;
 }
 
 /**
@@ -44,6 +46,8 @@ export class Spell {
   maxCastsPerTurn: number;
   targetType: string;
   effects: SpellEffectConfig[];
+  cooldown?: number;
+  cooldownCounter: number = 0;
 
   constructor(config: SpellConfig) {
     this.name = config.name;
@@ -53,16 +57,29 @@ export class Spell {
     this.maxCastsPerTurn = config.maxCastsPerTurn ?? 1;
     this.targetType = config.targetType;
     this.effects = config.effects;
+    this.cooldown = config.cooldown;
+    this.cooldownCounter = 0;
   }
 
   /**
    * Validates if the spell can be cast on the target (targeting logic only).
    */
   canCast(caster: Unit, target: Unit | null, context?: { map?: any, cellPosition?: { x: number, y: number } }): boolean {
-    // Range and AP checks (if needed)
+    // For selfOnly, if target is null, use caster for validation
+    let actualTarget = target;
+    if (this.targetType === 'selfOnly' && !actualTarget) {
+      actualTarget = caster;
+    }
+    // For other types, allow null target if cellPosition exists (for empty/unitOrEmpty)
+    let pos = null;
+    if (this.targetType === 'empty' || this.targetType === 'unitOrEmpty') {
+      pos = context?.cellPosition;
+    } else if (actualTarget) {
+      pos = actualTarget.position;
+    } else if (context?.cellPosition) {
+      pos = context.cellPosition;
+    }
     if (this.targetType !== 'none') {
-      if (!target && this.targetType !== 'empty' && this.targetType !== 'unitOrEmpty') return false;
-      const pos = target ? target.position : context?.cellPosition;
       if (!pos) return false;
       const dx = Math.abs(caster.position.x - pos.x);
       const dy = Math.abs(caster.position.y - pos.y);
@@ -70,29 +87,34 @@ export class Spell {
       if (dist > this.range || dist < this.minRange) return false;
       if (caster.ap < this.cost) return false;
     }
-    
+    // Target type validation
     switch (this.targetType) {
-      case 'unit':
-        return !!target && target.isAlive();
-      case 'enemy':
-        return !!target && target.isAlive() && caster.isEnemyOf(target);
-      case 'ally':
-        return !!target && target.isAlive() && caster.isAllyOf(target);
       case 'selfOnly':
-        return !!target && target.isAlive() && caster.isSelf(target);
+        // Permitir selfOnly sobre uno mismo aunque target sea null
+        return !!actualTarget && actualTarget.isAlive() && caster.isSelf(actualTarget);
+      case 'allyOnly':
+        // No incluye al caster
+        return !!actualTarget && actualTarget.isAlive() && caster.isAllyOf(actualTarget) && !caster.isSelf(actualTarget);
+      case 'ally':
+        // Incluye al caster si es aliado de sí mismo
+        return !!actualTarget && actualTarget.isAlive() && caster.isAllyOf(actualTarget);
+      case 'enemy':
+        return !!actualTarget && actualTarget.isAlive() && caster.isEnemyOf(actualTarget);
+      case 'unit':
+        return !!actualTarget && actualTarget.isAlive();
+      case 'empty':
+        if (!context?.map || !context.cellPosition) return false;
+        const walk = context.map.isWalkable(context.cellPosition);
+        const occ = context.map.isOccupied(context.cellPosition);
+        return walk && !occ;
       case 'unitOrEmpty':
-        if (target && target.isAlive()) return true;
+        if (actualTarget && actualTarget.isAlive()) return true;
         if (context?.map && context.cellPosition) {
           const walk = context.map.isWalkable(context.cellPosition);
           const occ = context.map.isOccupied(context.cellPosition);
           return walk && !occ;
         }
         return false;
-      case 'empty':
-        if (!context?.map || !context.cellPosition) return false;
-        const walk = context.map.isWalkable(context.cellPosition);
-        const occ = context.map.isOccupied(context.cellPosition);
-        return walk && !occ;
       case 'none':
         return true;
       default:
@@ -116,6 +138,25 @@ export class Spell {
     target: Unit | null,
     context?: EffectContext
   ): boolean {
-    return EffectEngine.applySpell(this, caster, target, context);
+    // Para selfOnly, si target es null, usar caster como target
+    let actualTarget = target;
+    if (this.targetType === 'selfOnly' && !actualTarget) {
+      actualTarget = caster;
+    }
+    // No hacer validaciones adicionales aquí, solo delegar a EffectEngine
+    const spellName = this.name;
+    const effectsWithSource = this.effects.map(e => ({ ...e, sourceSpell: spellName }));
+    const spellObj = { ...this, effects: effectsWithSource };
+    const result = EffectEngine.applySpell(spellObj, caster, actualTarget, context);
+    if (result && this.cooldown) {
+      this.cooldownCounter = this.cooldown;
+    }
+    return result;
+  }
+
+  decrementCooldown() {
+    if (this.cooldownCounter && this.cooldownCounter > 0) {
+      this.cooldownCounter--;
+    }
   }
 } 

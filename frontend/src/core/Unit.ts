@@ -72,8 +72,24 @@ export class Unit {
       this.maxHP = 10;
       this.hp = 10;
       this.spells = [
-        new Spell('Spell 1', 4, 3, 3, 1),
-        new Spell('Spell 2', 6, 5, 5, 1),
+        new Spell({
+          name: 'Spell 1',
+          cost: 4,
+          range: 3,
+          minRange: 1,
+          maxCastsPerTurn: 1,
+          targetType: 'enemy',
+          effects: [{ type: 'damage', value: 10 }]
+        }),
+        new Spell({
+          name: 'Spell 2',
+          cost: 6,
+          range: 5,
+          minRange: 1,
+          maxCastsPerTurn: 1,
+          targetType: 'enemy',
+          effects: [{ type: 'damage', value: 15 }]
+        })
       ];
     } else {
       // (id, name, type, position)
@@ -85,8 +101,24 @@ export class Unit {
       this.maxHP = 10;
       this.hp = 10;
       this.spells = [
-        new Spell('Spell 1', 4, 3, 3, 1),
-        new Spell('Spell 2', 6, 5, 5, 1),
+        new Spell({
+          name: 'Spell 1',
+          cost: 4,
+          range: 3,
+          minRange: 1,
+          maxCastsPerTurn: 1,
+          targetType: 'enemy',
+          effects: [{ type: 'damage', value: 10 }]
+        }),
+        new Spell({
+          name: 'Spell 2',
+          cost: 6,
+          range: 5,
+          minRange: 1,
+          maxCastsPerTurn: 1,
+          targetType: 'enemy',
+          effects: [{ type: 'damage', value: 15 }]
+        })
       ];
     }
     this.resetSpellUsage();
@@ -215,11 +247,17 @@ export class Unit {
     // Update states at the start of turn (expire 'start' states)
     this.updateStates('start');
     this.mp = baseMP;
-    // Only restore AP if not under 'ap_loss' state
+    // Restaurar AP base
     if (this.shouldRestoreAP && !this.hasState('ap_loss')) {
       this.ap = this.maxAP;
     }
-    // Only restore MP if not under 'mp_loss' state (future-proof)
+    // Sumar todos los buff_ap activos
+    const buffs = this.states.filter(s => s.type === 'buff_ap');
+    for (const buff of buffs) {
+      if (buff.value) {
+        this.ap += buff.value;
+      }
+    }
     if (!this.hasState('mp_loss')) {
       this.mp = this.maxMP;
     }
@@ -229,10 +267,31 @@ export class Unit {
   }
 
   /**
-   * Call this at the end of the turn to expire 'end' states (future extensibility).
+   * Called at the end of the unit's turn to expire 'end' states and recalculate AP/MP.
+   * Applies Dofus-like logic: AP/MP are restored to base + buffs - debuffs.
    */
   public updateEndOfTurnStates() {
+    // Expire 'end' states first
     this.updateStates('end');
+    // Recalculate AP and MP based on base, buffs, and debuffs
+    let ap = this.maxAP;
+    let mp = this.maxMP;
+    // Sum all buff_ap and debuff_ap
+    for (const state of this.states) {
+      if (state.type === 'buff_ap' && state.value) ap += state.value;
+      if (state.type === 'debuff_ap' && state.value) ap -= state.value;
+      if (state.type === 'buff_mp' && state.value) mp += state.value;
+      if (state.type === 'debuff_mp' && state.value) mp -= state.value;
+    }
+    // Clamp to minimum 0
+    this.ap = Math.max(0, ap);
+    this.mp = Math.max(0, mp);
+    // Decrement cooldown for all spells
+    for (const spell of this.spells) {
+      if (typeof spell.decrementCooldown === 'function') {
+        spell.decrementCooldown();
+      }
+    }
   }
 
   restoreResources() {
@@ -278,7 +337,7 @@ export class Unit {
   }
   /** Returns true if the other unit is an ally (same team, not self). */
   isAllyOf(other: Unit): boolean {
-    return this.team === other.team && this.id !== other.id;
+    return this.team === other.team;
   }
   /** Returns true if the other unit is an enemy (different team). */
   isEnemyOf(other: Unit): boolean {

@@ -133,6 +133,18 @@ export const UnitClasses: Record<string, UnitClass> = {
           { type: 'teleport', value: 0 }
         ]
       }),
+      new Spell({
+        name: 'Acceleration',
+        cost: 3,
+        range: 3,
+        minRange: 0,
+        maxCastsPerTurn: 1,
+        targetType: 'ally',
+        effects: [
+          { type: 'buff_ap', value: 2, duration: 3, expire: 'start' }
+        ],
+        cooldown: 4
+      })
     ],
     color: 0xf1c40f,
   },

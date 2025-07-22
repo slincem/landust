@@ -6,7 +6,7 @@ import type { State } from './Unit';
 import type { SpellEffectConfig } from './Spell';
 import { FloatingText } from '../ui/FloatingText';
 
-export type EffectType = 'damage' | 'heal' | 'teleport' | 'buff' | 'debuff' | 'drain_ap';
+export type EffectType = 'damage' | 'heal' | 'teleport' | 'buff' | 'debuff' | 'drain_ap' | 'buff_ap';
 
 export interface EffectContext {
   map?: any;
@@ -40,6 +40,28 @@ export class EffectEngine {
     let feedbackLayer = context?.scene?.unitLayer;
     let result = false;
     switch (effectType) {
+      case 'buff_ap':
+        if (target) {
+          // No acumular si ya existe un buff_ap del mismo sourceSpell
+          const sourceSpell = (effect as any).sourceSpell || (context && (context as any).sourceSpell) || (effect as any).spellName;
+          const already = target.states.find(s => s.type === 'buff_ap' && s.source === sourceSpell);
+          if (!already) {
+            const state: State = {
+              id: `buff_ap_${Date.now()}_${Math.random()}`,
+              type: 'buff_ap',
+              duration,
+              value,
+              expire,
+              source: sourceSpell
+            };
+            target.applyState(state);
+            effectText = `+${value} AP`;
+            color = '#42aaff';
+            feedbackPos = EffectEngine.getTargetPos(target);
+            result = true;
+          }
+        }
+        break;
       case 'drain_ap':
         if (target) {
           target.loseAP(value);
@@ -94,17 +116,19 @@ export class EffectEngine {
         break;
       // TODO: Add buffs, debuffs, area, etc.
       default:
+        // Si el efecto no aplica (por ejemplo, target null), simplemente omitir
         break;
     }
-    if (effectText && feedbackLayer) {
+    // Solo mostrar feedback si el efecto fue aplicado y hay target o posición válida
+    if (effectText && feedbackLayer && result) {
       FloatingText.show(feedbackLayer, effectText, feedbackPos.x, feedbackPos.y, color);
     }
     return result;
   }
 
   /**
-   * Applies all effects of a spell, in order.
-   * Subtracts AP only once for the whole spell.
+   * Aplica todos los efectos de un hechizo, en orden.
+   * Resta AP solo una vez por todo el hechizo, incluso si el efecto fue nulo.
    */
   static applySpell(
     spell: { effects: SpellEffectConfig[], cost: number },
@@ -112,13 +136,14 @@ export class EffectEngine {
     target: Unit | null,
     context?: EffectContext
   ): boolean {
-    // Subtract AP once for the whole spell
+    // Restar AP una sola vez, aunque el efecto sea nulo
     if (spell.cost > 0) {
       if (caster.ap < spell.cost) return false;
       caster.ap -= spell.cost;
     }
     let anyEffect = false;
     for (const effect of spell.effects) {
+      // Permitir target null si el hechizo lo permite
       const result = EffectEngine.applyEffect(effect, caster, target, context);
       anyEffect = anyEffect || result;
     }
