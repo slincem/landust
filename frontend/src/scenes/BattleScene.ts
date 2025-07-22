@@ -322,6 +322,28 @@ export class BattleScene extends Container {
     this.createSpellBar(canvasWidth, barHeight);
   }
 
+  /**
+   * Renders a small cooldown number in the top-right corner of a spell button if the spell is on cooldown.
+   * @param btn The Graphics button to render on
+   * @param cooldown The cooldown value to display
+   * @param buttonWidth Width of the button
+   */
+  private renderCooldownIndicator(btn: Graphics, cooldown: number, buttonWidth: number) {
+    if (!cooldown || cooldown <= 0) return;
+    const cdText = new Text(`${cooldown}`, new TextStyle({
+      fontSize: 16,
+      fill: '#fff',
+      fontWeight: 'bold',
+      stroke: '#222',
+      strokeThickness: 3,
+      align: 'right',
+    }));
+    cdText.anchor.set(1, 0); // Top-right
+    cdText.x = buttonWidth - 8;
+    cdText.y = 4;
+    btn.addChild(cdText);
+  }
+
   /** Creates the spell bar at the bottom of the canvas */
   private createSpellBar(canvasWidth: number = 720, barHeight: number = 48) {
     this.spellBar.removeChildren();
@@ -356,15 +378,16 @@ export class BattleScene extends Container {
       // Border
       btn.lineStyle(3, isSelected ? 0xfff066 : 0x222222);
       btn.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 12);
-      // Text
-      let labelText = spell.name;
-      if (isOnCooldown) labelText += ` (${spell.cooldownCounter})`;
-      else if (spell.maxCastsPerTurn !== -1) labelText += ` (${casts}/${spell.maxCastsPerTurn})`;
-      const label = new Text(labelText, new TextStyle({ fontSize: 18, fill: isSelected ? '#fff' : isEnabled ? '#bbb' : '#666', fontWeight: 'bold' }));
+      // Text (spell name only, no cooldown or casts info)
+      const label = new Text(spell.name, new TextStyle({ fontSize: 18, fill: isSelected ? '#fff' : isEnabled ? '#bbb' : '#666', fontWeight: 'bold' }));
       label.anchor.set(0.5);
       label.x = buttonWidth / 2;
       label.y = buttonHeight / 2;
       btn.addChild(label);
+      // Render cooldown indicator if spell is on cooldown and not enabled
+      if (isOnCooldown && !isEnabled) {
+        this.renderCooldownIndicator(btn, spell.cooldownCounter, buttonWidth);
+      }
       btn.x = (canvasWidth - totalWidth) / 2 + i * (buttonWidth + spacing);
       btn.y = y;
       btn.eventMode = isEnabled ? 'static' : 'none';
