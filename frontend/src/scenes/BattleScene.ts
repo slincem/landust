@@ -342,27 +342,35 @@ export class BattleScene extends Container {
     for (let i = 0; i < spells.length; i++) {
       const spell = spells[i];
       const hasAP = unit.ap >= spell.cost;
+      const casts = unit.castsThisTurn[spell.name] ?? 0;
+      const isOnCooldown = spell.cooldownCounter && spell.cooldownCounter > 0;
+      const maxCastsReached = spell.maxCastsPerTurn !== -1 && casts >= spell.maxCastsPerTurn;
+      // Centralized validation: spell is enabled only if not on cooldown, not maxed, and has AP
+      const isEnabled = hasAP && !isOnCooldown && !maxCastsReached;
       const isSelected = i === unit.selectedSpellIdx;
       const btn = new Graphics();
       // Background
-      btn.beginFill(isSelected ? 0x1976d2 : hasAP ? 0x333333 : 0x222222);
+      btn.beginFill(isSelected ? 0x1976d2 : isEnabled ? 0x333333 : 0x222222);
       btn.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 12);
       btn.endFill();
       // Border
       btn.lineStyle(3, isSelected ? 0xfff066 : 0x222222);
       btn.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 12);
       // Text
-      const label = new Text(spell.name, new TextStyle({ fontSize: 18, fill: isSelected ? '#fff' : hasAP ? '#bbb' : '#666', fontWeight: 'bold' }));
+      let labelText = spell.name;
+      if (isOnCooldown) labelText += ` (${spell.cooldownCounter})`;
+      else if (spell.maxCastsPerTurn !== -1) labelText += ` (${casts}/${spell.maxCastsPerTurn})`;
+      const label = new Text(labelText, new TextStyle({ fontSize: 18, fill: isSelected ? '#fff' : isEnabled ? '#bbb' : '#666', fontWeight: 'bold' }));
       label.anchor.set(0.5);
       label.x = buttonWidth / 2;
       label.y = buttonHeight / 2;
       btn.addChild(label);
       btn.x = (canvasWidth - totalWidth) / 2 + i * (buttonWidth + spacing);
       btn.y = y;
-      btn.eventMode = hasAP ? 'static' : 'none';
-      btn.cursor = hasAP ? 'pointer' : 'not-allowed';
+      btn.eventMode = isEnabled ? 'static' : 'none';
+      btn.cursor = isEnabled ? 'pointer' : 'not-allowed';
       btn.on('pointerdown', () => {
-        if (!hasAP) return;
+        if (!isEnabled) return;
         // Toggle spell selection: deselect if already selected
         if (unit.selectedSpellIdx === i) {
           unit.selectedSpellIdx = -1;
@@ -379,11 +387,14 @@ export class BattleScene extends Container {
     }
   }
 
-  /** Maneja el casteo de hechizos y feedback visual, tanto para clicks en grid como en sprites */
+  /** Handles spell casting and visual feedback for both grid and sprite clicks */
   private async handleSpellCast(target: Unit | null, cellPosition?: { x: number, y: number }) {
     const caster = this.turnManager.getCurrentUnit();
     const spell = caster.selectedSpell;
     if (!spell || caster.ap < spell.cost) return;
+    // Centralized validation: check cooldown and max casts per turn
+    const casts = caster.castsThisTurn[spell.name] ?? 0;
+    if ((spell.cooldownCounter && spell.cooldownCounter > 0) || (spell.maxCastsPerTurn !== -1 && casts >= spell.maxCastsPerTurn)) return;
     let spellUsed = false;
     let canCast = false;
     if ((spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') && !target) {
@@ -392,8 +403,6 @@ export class BattleScene extends Container {
       canCast = spell.canCast(caster, target, { map: this.map, cellPosition: target.position, scene: this });
     }
     if (!canCast) return;
-    const casts = caster.castsThisTurn[spell.name] ?? 0;
-    if (spell.maxCastsPerTurn !== -1 && casts >= spell.maxCastsPerTurn) return;
     let result = false;
     if ((spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') && !target) {
       result = spell.cast(caster, null, { map: this.map, scene: this, cellPosition });
