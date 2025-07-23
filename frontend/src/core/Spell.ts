@@ -82,7 +82,7 @@ export class Spell {
       if (!pos) return false;
       const dx = Math.abs(caster.position.x - pos.x);
       const dy = Math.abs(caster.position.y - pos.y);
-      const dist = Math.max(dx, dy);
+      const dist = dx + dy;
       if (dist > this.range || dist < this.minRange) return false;
       if (caster.ap < this.cost) return false;
     }

@@ -75,7 +75,7 @@ export class SpellSystem {
       if (!spell || !caster || !caster.isAlive() || !unit.isAlive() || caster.ap < spell.cost) continue;
       // Use only spell.canCast for all targeting (including self-heal)
       if (this.scene.movementSystem.isCellReachable(unit.position, caster) && spell.canCast(caster, unit, { map: this.map, cellPosition: unit.position })) {
-        sprite.eventMode = 'static';
+        //sprite.eventMode = 'static';
         sprite.cursor = 'pointer';
         sprite.on('pointerdown', () => {
           this.handleSpellCast(unit, unit.position);
