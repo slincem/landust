@@ -190,11 +190,37 @@ export class BattleScene extends Container {
     this.updateUnitSprites();
   }
 
+  /**
+   * Handles the death of a unit: removes its visuals and frees its cell on the map.
+   * This is the central place to add death animations or effects in the future.
+   */
+  private handleUnitDeath(unit: Unit) {
+    // Remove sprite from unitLayer and unitSprites map
+    const sprite = this.unitSprites.get(unit.id);
+    if (sprite) {
+      this.unitLayer.removeChild(sprite);
+      this.unitSprites.delete(unit.id);
+    }
+    // Remove HP/AP bar
+    const bar = this.unitBars.get(unit.id);
+    if (bar) {
+      this.unitLayer.removeChild(bar);
+      this.unitBars.delete(unit.id);
+    }
+    // Free the cell in the map
+    this.map.setOccupied(unit.position, null);
+    // Optionally, mark as dead (future extensibility)
+    // (unit as any).alive = false;
+  }
+
   /** Updates the position, outline, and bars of units */
   private updateUnitSprites() {
-    const activeId = this.turnManager.getCurrentUnit().id;
+    const activeUnit = this.turnManager.getCurrentUnit();
+    const activeId = activeUnit ? activeUnit.id : '';
     for (const unit of this.units) {
-      const sprite = this.unitSprites.get(unit.id)!;
+      if (!unit.isAlive()) continue; // Skip dead units
+      const sprite = this.unitSprites.get(unit.id);
+      if (!sprite) continue;
       sprite.x = unit.position.x * 64 + 32;
       sprite.y = unit.position.y * 64 + 32;
       // Optional: highlights the active unit
@@ -413,6 +439,7 @@ export class BattleScene extends Container {
   /** Handles spell casting and visual feedback for both grid and sprite clicks */
   private async handleSpellCast(target: Unit | null, cellPosition?: { x: number, y: number }) {
     const caster = this.turnManager.getCurrentUnit();
+    if (!caster || !caster.isAlive()) return;
     const spell = caster.selectedSpell;
     if (!spell || caster.ap < spell.cost) return;
     // Centralized validation: check cooldown and max casts per turn
@@ -423,6 +450,7 @@ export class BattleScene extends Container {
     if ((spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') && !target) {
       canCast = spell.canCast(caster, null, { map: this.map, cellPosition, scene: this });
     } else if (target instanceof Unit) {
+      if (!target.isAlive()) return; // Prevent casting on dead units
       canCast = spell.canCast(caster, target, { map: this.map, cellPosition: target.position, scene: this });
     }
     if (!canCast) return;
@@ -435,6 +463,14 @@ export class BattleScene extends Container {
     if (result) {
       caster.castsThisTurn[spell.name] = casts + 1;
       spellUsed = true;
+      // If the target died as a result of the spell, handle its death
+      if (target instanceof Unit && !target.isAlive()) {
+        this.handleUnitDeath(target);
+      }
+      // If the caster died as a result of the spell (e.g., recoil), handle its death
+      if (!caster.isAlive()) {
+        this.handleUnitDeath(caster);
+      }
       this.updateTurnLabel();
       this.updateUnitSprites();
       this.setupSpellListeners();
@@ -451,9 +487,11 @@ export class BattleScene extends Container {
     // Movement on the grid
     this.gridView.on('pointermove', (e: any) => {
       if (this.isMoving) return;
+      const currentUnit = this.turnManager.getCurrentUnit();
+      if (!currentUnit || !currentUnit.isAlive()) return;
       this.clearEnemyHighlights();
       this.updateReachableAndHighlights();
-      const unit = this.turnManager.getCurrentUnit();
+      const unit = currentUnit;
       const selectedSpell = unit.selectedSpell;
       const localX = e.global.x - this.gameContainer.x;
       const localY = e.global.y - this.gameContainer.y;
@@ -468,10 +506,9 @@ export class BattleScene extends Container {
             }
           } else {
             const target = this.units.find(u => u.position.x === mouseCell.x && u.position.y === mouseCell.y);
-            if (target && selectedSpell.canCast(unit, target)) {
-              // Use the first effect type as reference for tint
+            if (target && target.isAlive() && selectedSpell.canCast(unit, target)) {
               const mainEffectType = selectedSpell.effects[0]?.type as EffectType;
-              let color = getTargetTint(mainEffectType);
+              let color = BattleVisuals.getTargetTint(mainEffectType);
               const sprite = this.unitSprites.get(target.id);
               if (sprite) BattleVisuals.highlightUnitSprite(sprite, color);
             }
@@ -503,7 +540,9 @@ export class BattleScene extends Container {
     // Click on the grid for teleport, heal, or damage
     this.gridView.on('pointerdown', async (e: any) => {
       if (this.isMoving) return;
-      const caster = this.turnManager.getCurrentUnit();
+      const currentUnit = this.turnManager.getCurrentUnit();
+      if (!currentUnit || !currentUnit.isAlive()) return;
+      const caster = currentUnit;
       const spell = caster.selectedSpell;
       const localX = e.global.x - this.gameContainer.x;
       const localY = e.global.y - this.gameContainer.y;
@@ -511,12 +550,13 @@ export class BattleScene extends Container {
       if (!pos) return;
       if (spell && caster.ap >= spell.cost) {
         let target = this.units.find(u => u.position.x === pos.x && u.position.y === pos.y) || null;
+        if (target && !target.isAlive()) return; // Prevent targeting dead units
         if ((spell.targetType === 'empty' || spell.targetType === 'unitOrEmpty') && !target) {
           await this.handleSpellCast(null, pos);
         } else if (target && spell.canCast(caster, target, { map: this.map, cellPosition: pos })) {
           await this.handleSpellCast(target, pos);
         }
-      } else if (!spell || (spell && caster.ap < spell.cost)) {
+      }
         // Normal movement
         if (!spell && this.isCellReachable(pos, caster)) {
           const path = this.grid.findPath(caster.position, pos, caster.mp, this.map);
@@ -537,8 +577,7 @@ export class BattleScene extends Container {
             this.updateEndTurnButton();
           }
         }
-      }
-    });
+      });
     // Listeners en sprites: solo delegan a handleSpellCast
     this.setupSpellListeners();
     this.positionSpellBar();
@@ -585,19 +624,18 @@ export class BattleScene extends Container {
   }
 
   /**
-   * Sets up listeners for all unit sprites based on spell.canCast.
-   * Uses a helper to apply listeners and visual feedback.
-   */
+   * Sets up listeners for all unit sprites based on spell.canCast. */
   private setupSpellListeners() {
     const caster = this.turnManager.getCurrentUnit();
-    const spell = caster.selectedSpell;
+    const spell = caster ? caster.selectedSpell : undefined;
     for (const unit of this.units) {
+      if (!unit.isAlive()) continue; // Skip dead units
       const sprite = this.unitSprites.get(unit.id);
       if (!sprite) continue;
       sprite.removeAllListeners && sprite.removeAllListeners('pointerdown');
       sprite.eventMode = 'none';
       sprite.cursor = '';
-      if (!spell || caster.ap < spell.cost) continue;
+      if (!spell || !caster || !caster.isAlive() || !unit.isAlive() || caster.ap < spell.cost) continue;
       // Use only spell.canCast for all targeting (including self-heal)
       if (this.isCellReachable(unit.position, caster) && spell.canCast(caster, unit, { map: this.map, cellPosition: unit.position })) {
         sprite.eventMode = 'static';
@@ -605,7 +643,6 @@ export class BattleScene extends Container {
         sprite.on('pointerdown', () => {
           this.handleSpellCast(unit, unit.position);
         });
-
       }
     }
   }
