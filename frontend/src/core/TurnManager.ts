@@ -100,15 +100,15 @@ export class TurnManager {
     }
   }
 
-  /** Ends the turn for the current unit and advances to the next, skipping dead units. */
+  /** 
+   * Ends the turn and advances to the next.
+   * Note: This class does NOT execute effects directly. Effects (buffs, cooldowns, etc.)
+   * must be handled externally by BattleLogic or similar.
+   */
   endTurn() {
     this.phase = 'end';
     const unit = this.getCurrentUnit();
     if (unit) {
-      // Trigger end-of-turn effects (states, passives, etc)
-      if (typeof unit.triggerEndOfTurnEffects === 'function') {
-        unit.triggerEndOfTurnEffects();
-      }
       this.trigger('onTurnEnd', unit, 'end');
     }
     // Advance to next alive unit
