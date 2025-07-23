@@ -109,10 +109,6 @@ export class TurnManager {
       if (typeof unit.triggerEndOfTurnEffects === 'function') {
         unit.triggerEndOfTurnEffects();
       }
-      // Update end-of-turn states (for future: buffs, poison, etc)
-      if (typeof unit.updateEndOfTurnStates === 'function') {
-        unit.updateEndOfTurnStates();
-      }
       this.trigger('onTurnEnd', unit, 'end');
     }
     // Advance to next alive unit

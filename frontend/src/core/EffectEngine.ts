@@ -55,7 +55,6 @@ export class EffectEngine {
     const effectType: EffectType = effect.type;
     const value: number = effect.value;
     const duration: number = effect.duration ?? 1;
-    const expire: 'start' | 'end' = effect.expire ?? 'start';
     let effectText = '';
     // Use dynamic color based on effect type
     let color = EffectEngine.getEffectColor(effectType);
@@ -74,10 +73,13 @@ export class EffectEngine {
               type: 'buff_ap',
               duration,
               value,
-              expire,
               source: sourceSpell
             };
             target.applyState(state);
+            // Apply AP bonus immediately if self-cast
+            if (target.isSelf(caster) && value) {
+              target.ap += value;
+            }
             effectText = `+${value} AP`;
             feedbackPos = EffectEngine.getTargetPos(target);
             result = true;
@@ -91,8 +93,7 @@ export class EffectEngine {
             id: `ap_loss_${Date.now()}_${Math.random()}`,
             type: 'ap_loss',
             duration,
-            value,
-            expire
+            value
           };
           target.applyState(state);
           effectText = `-${value} AP`;

@@ -119,7 +119,7 @@ export const UnitClasses: Record<string, UnitClass> = {
         maxCastsPerTurn: -1,
         targetType: 'enemy',
         effects: [
-          { type: 'drain_ap', value: 2, duration: 1, expire: 'end' }
+          { type: 'drain_ap', value: 2, duration: 1 }
         ]
       }),
       new Spell({
@@ -135,13 +135,13 @@ export const UnitClasses: Record<string, UnitClass> = {
       }),
       new Spell({
         name: 'Acceleration',
-        cost: 3,
+        cost: 2,
         range: 3,
         minRange: 0,
         maxCastsPerTurn: 1,
         targetType: 'ally',
         effects: [
-          { type: 'buff_ap', value: 2, duration: 3, expire: 'start' }
+          { type: 'buff_ap', value: 2, duration: 3 }
         ],
         cooldown: 4
       })

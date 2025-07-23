@@ -19,7 +19,7 @@ export interface State {
   value?: number;
   source?: string;
   stackable?: boolean;
-  expire?: 'start' | 'end'; // When to decrement and remove (default: 'start')
+  applyEffect?: (unit: Unit) => void;
 }
 
 /**
@@ -174,7 +174,7 @@ export class Unit {
   }
 
   /**
-   * Apply a new state to the unit.
+   * Apply a new state to the unit.   
    */
   public applyState(state: State) {
     // If not stackable, replace existing state of same type
@@ -199,27 +199,30 @@ export class Unit {
   }
 
   /**
-   * Update all states: decrement duration, remove expired.
-   * By default, called at the start of the turn.
-   * For future extensibility, states can have an 'expire' field ('start' | 'end').
+   * Updates all states on the unit.
+   * All states are now processed at the end of the unit's turn only:
+   * 1. Effects remain active for their full duration
+   * 2. Duration is decremented at end of turn
+   * 3. States are removed only after their duration reaches 0
+   * This method should be called only at the end of the unit's turn.
    */
-  public updateStates(phase: 'start' | 'end' = 'start') {
+  public updateStates() {
+    // Process each state at the end of the turn
     for (let i = this.states.length - 1; i >= 0; i--) {
       const state = this.states[i];
-      const expire = state.expire ?? 'start';
-      if (expire === phase) {
-        state.duration -= 1;
-      }
+      // Decrement duration
+      state.duration -= 1;
+      // Remove if duration is 0 (state has completed its full duration)
       if (state.duration <= 0) {
-        // If expiring an 'ap_loss' state at end of turn, restore AP immediately
-        if (state.type === 'ap_loss' && expire === 'end') {
-          this.ap = this.maxAP;
+        // Handle cleanup of specific state types
+        if (state.type === 'ap_loss') {
+          this.ap = this.maxAP; // Restore AP when ap_loss expires
         }
-        // (Future: handle other resource/blocking states here)
         this.states.splice(i, 1);
       }
     }
   }
+  
 
   /**
    * Hook: called at the start of the unit's turn (for passives, states, etc).
@@ -241,52 +244,75 @@ export class Unit {
 
   /**
    * Called at the start of the unit's turn.
-   * Restores AP/MP unless prevented by a state.
+   * 1. Restores base AP/MP
+   * 2. Applies active buffs/debuffs
+   * 3. Resets spell usage
+   * No states are removed in startTurn - all state management happens in updateStates('end')
    */
   startTurn(baseMP: number = 4) {
-    // Update states at the start of turn (expire 'start' states)
-    this.updateStates('start');
-    this.mp = baseMP;
-    // Restaurar AP base
+    // 1. Restore base resources
     if (this.shouldRestoreAP && !this.hasState('ap_loss')) {
       this.ap = this.maxAP;
-    }
-    // Sumar todos los buff_ap activos
-    const buffs = this.states.filter(s => s.type === 'buff_ap');
-    for (const buff of buffs) {
-      if (buff.value) {
-        this.ap += buff.value;
-      }
     }
     if (!this.hasState('mp_loss')) {
       this.mp = this.maxMP;
     }
     this.shouldRestoreAP = true;
+
+    // 2. Apply active buffs/debuffs
+    let totalAP = this.ap;
+    let totalMP = this.mp;
+    
+    for (const state of this.states) {
+      if (state.type === 'buff_ap' && state.value) {
+        totalAP += state.value;
+      }
+      if (state.type === 'debuff_ap' && state.value) {
+        totalAP -= state.value;
+      }
+      if (state.type === 'buff_mp' && state.value) {
+        totalMP += state.value;
+      }
+      if (state.type === 'debuff_mp' && state.value) {
+        totalMP -= state.value;
+      }
+    }
+
+    // Apply calculated totals with minimum of 0
+    this.ap = Math.max(0, totalAP);
+    this.mp = Math.max(0, totalMP);
+
+    // 3. Reset spell usage for the new turn
     this.resetSpellUsage();
-    this.selectedSpellIdx = -1; // Require manual selection each turn
+    this.selectedSpellIdx = -1;
   }
+  
+  
 
   /**
-   * Called at the end of the unit's turn to expire 'end' states and recalculate AP/MP.
-   * Applies Dofus-like logic: AP/MP are restored to base + buffs - debuffs.
+   * Called at the end of the unit's turn.
+   * 1. Updates state durations and removes expired states
+   * 2. Recalculates AP/MP based on remaining active states
+   * 3. Updates spell cooldowns
    */
   public updateEndOfTurnStates() {
-    // Expire 'end' states first
-    this.updateStates('end');
-    // Recalculate AP and MP based on base, buffs, and debuffs
-    let ap = this.maxAP;
-    let mp = this.maxMP;
-    // Sum all buff_ap and debuff_ap
+    console.log(`[State] updateEndOfTurnStates called for ${this.name}`);
+    // 1. Process state durations and remove expired
+    this.updateStates();
+    // 2. Recalculate AP/MP based on remaining active states
+    let totalAP = this.maxAP;
+    let totalMP = this.maxMP;
+    // Apply all active buffs/debuffs
     for (const state of this.states) {
-      if (state.type === 'buff_ap' && state.value) ap += state.value;
-      if (state.type === 'debuff_ap' && state.value) ap -= state.value;
-      if (state.type === 'buff_mp' && state.value) mp += state.value;
-      if (state.type === 'debuff_mp' && state.value) mp -= state.value;
+      if (state.type === 'buff_ap' && state.value) totalAP += state.value;
+      if (state.type === 'debuff_ap' && state.value) totalAP -= state.value;
+      if (state.type === 'buff_mp' && state.value) totalMP += state.value;
+      if (state.type === 'debuff_mp' && state.value) totalMP -= state.value;
     }
-    // Clamp to minimum 0
-    this.ap = Math.max(0, ap);
-    this.mp = Math.max(0, mp);
-    // Decrement cooldown for all spells
+    // Apply calculated totals with minimum of 0
+    this.ap = Math.max(0, totalAP);
+    this.mp = Math.max(0, totalMP);
+    // 3. Update spell cooldowns (only once per turn, here)
     for (const spell of this.spells) {
       if (typeof spell.decrementCooldown === 'function') {
         spell.decrementCooldown();

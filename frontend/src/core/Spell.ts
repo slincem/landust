@@ -18,7 +18,6 @@ export interface SpellEffectConfig {
   type: EffectType;
   value: number;
   duration?: number;
-  expire?: 'start' | 'end';
   // Add more effect params as needed
   // NUEVO: para efectos que requieren saber el hechizo origen
   sourceSpell?: string;
