@@ -11,7 +11,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
-    "pixi.js": "^8.0.0"
+    "pixi.js": "^8.11.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

@@ -1,6 +1,7 @@
 // GridView.ts
-// Renders the board and highlights reachable cells and the selected path
-import { Container, Graphics } from 'pixi.js';
+// Renders the board, highlights reachable cells, and displays the movement path
+
+import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { Position } from '@core/Grid';
 
 export interface GridViewOptions {
@@ -10,41 +11,49 @@ export interface GridViewOptions {
 }
 
 export class GridView extends Container {
-  options: GridViewOptions;
+  private options: GridViewOptions;
   private gridLayer: Graphics;
-  private highlightLayer: Graphics;
-  private pathLayer: Graphics;
+  private highlightLayer: Container;
+  private pathContainer: Container;
+  private hitAreaGraphics: Graphics;
 
   constructor(options: GridViewOptions) {
     super();
     this.options = options;
+
     this.gridLayer = new Graphics();
-    this.highlightLayer = new Graphics();
-    this.pathLayer = new Graphics();
+    this.highlightLayer = new Container();
+    this.pathContainer = new Container();
+    this.hitAreaGraphics = this.createHitArea();
+
     this.drawGrid();
-    // Capa interactiva invisible para recibir eventos en todo el grid
-    const hitArea = new Graphics();
-    hitArea.beginFill(0xffffff, 0);
-    hitArea.drawRect(0, 0, options.width * options.cellSize, options.height * options.cellSize);
-    hitArea.endFill();
-    hitArea.eventMode = 'static';
-    hitArea.cursor = 'pointer';
-    this.addChild(hitArea);
+
+    this.addChild(this.hitAreaGraphics); // always behind
     this.addChild(this.gridLayer);
     this.addChild(this.highlightLayer);
-    this.addChild(this.pathLayer);
-    this.eventMode = 'static'; // Asegura que el grid reciba eventos
-    // The invisible hitArea must be behind everything
-    this.setChildIndex(hitArea, 0);
-    // Opcional: puedes asignar this.hitArea = ... para legacy Pixi
+    this.addChild(this.pathContainer);
 
+    this.eventMode = 'static';
   }
 
-  /** Draws the base grid lines */
-  private drawGrid() {
+  /** Creates a transparent hit area to capture pointer events */
+  private createHitArea(): Graphics {
+    const { width, height, cellSize } = this.options;
+    const hit = new Graphics();
+    hit.fill({ color: 0xffffff, alpha: 0 });
+    hit.rect(0, 0, width * cellSize, height * cellSize);
+    hit.hitArea = new Rectangle(0, 0, width * cellSize, height * cellSize);
+    hit.interactive = true;
+    hit.eventMode = 'static';
+    hit.cursor = 'pointer';
+    return hit;
+  }
+
+  /** Draws the grid lines based on configured dimensions */
+  private drawGrid(): void {
     const { width, height, cellSize } = this.options;
     this.gridLayer.clear();
-    this.gridLayer.lineStyle(1, 0x888888, 0.5);
+    this.gridLayer.setStrokeStyle({ width: 1, color: 0x888888, alpha: 0.5 });
     for (let y = 0; y <= height; y++) {
       this.gridLayer.moveTo(0, y * cellSize);
       this.gridLayer.lineTo(width * cellSize, y * cellSize);
@@ -55,60 +64,68 @@ export class GridView extends Container {
     }
   }
 
-  /** Highlights reachable cells in blue */
-  showReachableCells(cells: Position[]) {
-    this.highlightLayer.clear();
+  /** Highlights all reachable cells in blue */
+  public showReachableCells(cells: Position[]): void {
+    this.highlightLayer.removeChildren();
     for (const cell of cells) {
-      this.highlightLayer.beginFill(0x3399ff, 0.3);
-      this.highlightLayer.drawRect(
-        cell.x * this.options.cellSize,
-        cell.y * this.options.cellSize,
-        this.options.cellSize,
-        this.options.cellSize
-      );
-      this.highlightLayer.endFill();
+      const sprite = new Sprite(Texture.WHITE);
+      sprite.tint = 0x3399ff;
+      sprite.alpha = 0.4;
+      sprite.width = this.options.cellSize;
+      sprite.height = this.options.cellSize;
+      sprite.x = cell.x * this.options.cellSize;
+      sprite.y = cell.y * this.options.cellSize;
+      this.highlightLayer.addChild(sprite);
     }
   }
 
-  /** Draws the selected path in green (cells + line) */
-  showPath(path: Position[]) {
-    this.pathLayer.clear();
+  /** Displays the movement path, including the final cell */
+  public showPath(path: Position[]): void {
+    // Clear previous path
+    this.pathContainer.removeChildren();
     if (!path || path.length === 0) return;
-    // Dibuja celdas
-    for (const cell of path) {
-      this.pathLayer.beginFill(0x33ff66, 0.5);
-      this.pathLayer.drawRect(
-        cell.x * this.options.cellSize,
-        cell.y * this.options.cellSize,
-        this.options.cellSize,
-        this.options.cellSize
-      );
-      this.pathLayer.endFill();
-    }
-    // Draw line over the center of each cell in the path
+
+    const { cellSize } = this.options;
+
+    // Draw each path cell as a tinted sprite
+    path.forEach((cell, idx) => {
+      const isLast = idx === path.length - 1;
+      const sprite = new Sprite(Texture.WHITE);
+      sprite.tint = isLast ? 0x99ff99 : 0x33ff66;
+      sprite.alpha = 0.5;
+      sprite.width = cellSize;
+      sprite.height = cellSize;
+      sprite.x = cell.x * cellSize;
+      sprite.y = cell.y * cellSize;
+      this.pathContainer.addChild(sprite);
+    });
+
+    // Draw connecting line on top
     if (path.length > 1) {
-      this.pathLayer.lineStyle(4, 0x33ff66, 0.8);
-      const getCenter = (cell: Position) => [
-        cell.x * this.options.cellSize + this.options.cellSize / 2,
-        cell.y * this.options.cellSize + this.options.cellSize / 2
+      const lineG = new Graphics();
+      lineG.setStrokeStyle({ width: 4, color: 0x33ff66, alpha: 0.8 });
+      const getCenter = (c: Position): [number, number] => [
+        c.x * cellSize + cellSize / 2,
+        c.y * cellSize + cellSize / 2,
       ];
       const [startX, startY] = getCenter(path[0]);
-      this.pathLayer.moveTo(startX, startY);
+      lineG.moveTo(startX, startY);
       for (let i = 1; i < path.length; i++) {
         const [x, y] = getCenter(path[i]);
-        this.pathLayer.lineTo(x, y);
+        lineG.lineTo(x, y);
       }
+      this.pathContainer.addChild(lineG);
     }
   }
 
-  /** Clears highlights and path overlays */
-  clearHighlights() {
-    this.highlightLayer.clear();
-    this.pathLayer.clear();
+  /** Clears both highlights and path drawing */
+  public clearHighlights(): void {
+    this.highlightLayer.removeChildren();
+    this.pathContainer.removeChildren();
   }
 
-  /** Returns the cell (x, y) under a pixel point, or null if out of bounds */
-  getCellAtPixel(x: number, y: number): Position | null {
+  /** Converts pixel coordinates into grid cell coordinates */
+  public getCellAtPixel(x: number, y: number): Position | null {
     const cx = Math.floor(x / this.options.cellSize);
     const cy = Math.floor(y / this.options.cellSize);
     if (
@@ -119,4 +136,4 @@ export class GridView extends Container {
     }
     return null;
   }
-} 
+}

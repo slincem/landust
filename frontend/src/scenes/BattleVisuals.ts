@@ -32,13 +32,32 @@ export class BattleVisuals {
   }
 
   /**
-   * Highlights a cell on the given graphics layer with the specified color.
-   * Does not clear the layer.
+   * Highlights a single cell with the specified color and opacity.
+   * Uses only modern Pixi v8 APIs (no deprecated methods),
+   * and guarantees that the full 64×64 area is painted every time.
    */
-  static highlightTargetCell(layer: Graphics, pos: Position, color: number, alpha: number = 0.32): void {
-    layer.beginFill(color, alpha);
-    layer.drawRect(pos.x * 64, pos.y * 64, 64, 64);
-    layer.endFill();
+  static highlightTargetCell(
+    layer: Graphics,
+    pos: Position,
+    color: number,
+    alpha: number = 0.32
+  ): void {
+    // 1) Start a fresh path
+    layer.beginPath();
+
+    // 2) Define the rectangle for this cell
+    layer.rect(
+      pos.x * 64,
+      pos.y * 64,
+      64,
+      64
+    );
+
+    // 3) Fill that rectangle with the given color & alpha
+    layer.fill({ color, alpha });
+
+    // 4) Close the path to finalize drawing for this cell
+    layer.closePath();
   }
 
   /**
@@ -49,17 +68,25 @@ export class BattleVisuals {
   }
 
   /**
-   * Resets all unit sprite tints to their default state, highlighting the active unit if needed.
+   * Resets all unit sprite tints to their default state,
+   * highlighting the active unit if needed.
+   *
    * @param units List of all units
    * @param unitSprites Map of unit.id to Sprite
    * @param activeUnitId The id of the currently active unit
    */
-  static resetAllUnitSpriteTints(units: Unit[], unitSprites: Map<string, Sprite>, activeUnitId: string): void {
+  static resetAllUnitSpriteTints(
+    units: Unit[],
+    unitSprites: Map<string, Sprite>,
+    activeUnitId: string
+  ): void {
     for (const unit of units) {
       const sprite = unitSprites.get(unit.id);
       if (!sprite) continue;
-      sprite.tint = unit.id === activeUnitId ? EffectColors.default : 0xcccccc;
+      sprite.tint = unit.id === activeUnitId
+        ? EffectColors.default
+        : 0xcccccc;
       sprite.alpha = unit.id === activeUnitId ? 1 : 0.7;
     }
   }
-} 
+}

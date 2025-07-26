@@ -22,14 +22,14 @@ export class FloatingText extends Container {
     const yOffset = options.yOffset ?? 0;
     this.startY = y + yOffset;
     this.endY = this.startY - 32;
-    this.textObj = new Text(text, new TextStyle({
+    this.textObj = new Text({text, style: {
       fontSize,
       fill: color,
       fontWeight: 'bold',
       stroke: '#fff',
       align: 'center',
       dropShadow: true,
-    }));
+    }});
     this.textObj.anchor.set(0.5);
     this.textObj.x = x;
     this.textObj.y = this.startY;

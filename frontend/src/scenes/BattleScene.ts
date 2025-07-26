@@ -36,7 +36,7 @@ export class BattleScene extends Container {
   public gridView: GridView;
   public turnManager: TurnManager;
   public map: MapGrid;
-  public unitBars: Map<string, Graphics> = new Map();
+  public unitBars: Map<string, Container> = new Map();
 
   // Visual layers
   public gameContainer: Container;
@@ -60,9 +60,8 @@ export class BattleScene extends Container {
     super();
     // --- Visual setup ---
     const bg = new Graphics();
-    bg.beginFill(0x2c2f36);
-    bg.drawRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    bg.endFill();
+    bg.fill({ color: 0x2c2f36 });
+    bg.rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     this.addChild(bg);
 
     this.gameContainer = new Container();
@@ -195,7 +194,7 @@ export class BattleScene extends Container {
       this.unitSprites.set(unit.id, sprite);
       this.unitLayer.addChild(sprite);
       // HP and AP bars
-      const bar = new Graphics();
+      const bar = new Container();
       this.unitBars.set(unit.id, bar);
       this.unitLayer.addChild(bar);
     }
