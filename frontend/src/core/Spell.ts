@@ -21,7 +21,7 @@ export interface SpellEffectConfig {
   value: number;
   duration?: number;
   // Add more effect params as needed
-  // NUEVO: para efectos que requieren saber el hechizo origen
+  // New: for effects that need to know the spell origin
   sourceSpell?: string;
 }
 
