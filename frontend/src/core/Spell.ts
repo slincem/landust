@@ -1,8 +1,10 @@
 // Spell.ts
+// Handles spell configuration, targeting validation, and effect delegation
+
 import type { Unit } from './Unit';
-import type { Position } from './MapGrid';
-import { FloatingText } from '../ui/FloatingText';
-import { EffectEngine, EffectType, EffectContext } from './EffectEngine';
+import type { EffectType } from './EffectEngine';
+import { EffectEngine } from './EffectEngine';
+import type { EffectContext } from './effects';
 
 export type SpellEffectType = 'damage' | 'heal' | 'drain_ap' | 'teleport';
 
